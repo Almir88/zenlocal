@@ -1,39 +1,11 @@
-<h2 class="section-title">Consumption</h2>
-<p class="section-desc">
-  Monthly AI usage (Groq and OpenAI) in tokens. Data is recorded from each
-  prompt run. Admin only.
-</p>
 
-@if (loading) {
-  <p class="muted">Loading…</p>
-} @else if (error) {
-  <p class="error">{{ error }}</p>
-} @else {
-  <div class="card consumption-card">
-    <div class="table-wrap">
-      <table class="consumption-table">
-        <thead>
-          <tr>
-            <th>Month</th>
-            <th class="num">Groq (tokens)</th>
-            <th class="num">OpenAI (tokens)</th>
-            <th class="num">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of rows; track row.month) {
-            <tr>
-              <td class="month-cell">{{ row.monthLabel }}</td>
-              <td class="num">{{ formatTokens(row.groq.totalTokens) }}</td>
-              <td class="num">{{ formatTokens(row.openai.totalTokens) }}</td>
-              <td class="num total-cell">{{ formatTokens(row.totalTokens) }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-    @if (rows.length === 0) {
-      <p class="muted">No usage recorded yet. Run a prompt with Groq or OpenAI to see data here.</p>
-    }
-  </div>
-}
+    <aside>Existing sidebar content</aside>
+<!-----------------------
+<!--
+    Add sidebar element test here
+-->
+<ng-template #test>
+    <p>Test content</p>
+    <p style="color: red;">Additional test content</p>
+</ng-template>
+<!----------------------->
