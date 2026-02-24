@@ -1,73 +1,10 @@
-<h2 class="section-title">Prompt</h2>
-<p class="app-desc">
-  You describe in plain text what you want in the code, and the AI generates the
-  changes. It uses your GitHub repo: a new branch is created, edits are applied,
-  and a pull request is opened when needed. You can choose to run it via Groq or
-  OpenAI depending on which API key you have in .env. Admins see prompt logs and
-  can add users who can use Prompt as well.
-</p>
-<div class="card prompt-card">
-  <p class="card-desc">
-    Pick project, AI, type what you want done and optionally a branch name. Hit
-    Run to start.
-  </p>
-  <form [formGroup]="form" (ngSubmit)="onSubmit()" class="prompt-form">
-    <div class="form-row select-row">
-      <div class="form-group">
-        <label class="ai-label">Project</label>
-        <select
-          formControlName="project"
-          class="ai-select"
-          [disabled]="loading"
-        >
-          @for (opt of projects; track opt.value) {
-            <option [value]="opt.value">{{ opt.label }}</option>
-          }
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="ai-label">AI provider</label>
-        <select
-          formControlName="aiProvider"
-          class="ai-select"
-          [disabled]="loading"
-        >
-          @for (opt of aiProviders; track opt.value) {
-            <option [value]="opt.value">{{ opt.label }}</option>
-          }
-        </select>
-      </div>
-    </div>
-    <textarea
-      formControlName="prompt"
-      placeholder="e.g. Add login page with email and password"
-      rows="4"
-      [disabled]="loading"
-    ></textarea>
-    @if (form.get("prompt")?.invalid && form.get("prompt")?.touched) {
-      <p class="field-error">Prompt is required</p>
-    }
-    <input
-      type="text"
-      formControlName="branchName"
-      placeholder="Branch name (optional)"
-      [disabled]="loading"
-    />
-    @if (error) {
-      <p class="error">{{ error }}</p>
-    }
-    @if (result) {
-      <div class="result">
-        <p>{{ result.message }}</p>
-        @if (result.pr_url) {
-          <a [href]="result.pr_url" target="_blank" rel="noopener"
-            >Open pull request</a
-          >
-        }
-      </div>
-    }
-    <button type="submit" [disabled]="form.invalid || loading">
-      {{ loading ? "Running..." : "Run" }}
-    </button>
-  </form>
-</div>
+<div class="container-fluid"><div class="row"><div *ngIf="isEdit"  class="col-6"><!-- edit form Card here--></div><div class="col-6"><div *ngIf="isPromptEdit" class="p-1">  <div class="card card-body bg-white p-2 mb-2 rounded">  </div>    </div><!-- edit button here -->
+<div *ngIf="!isPromptEdit">  <div class="card card-body bg-white p-2 mb-2 rounded"><button class="btn btn-primary" (click)="editButton()" [disabled]="isPromptEdit ||!canAddUser" type="button"><i class="fas fa-plus"></i> Prompt</button>
+  </div>
+  </div></div></div>
+
+<div class="container-fluid"><div class="row"><div class="col-6">
+ <!-- edit form Card here -->
+</div><div class="col-6"><div *ngIf="!isEdit">  <div class="card card-body bg-white p-2 mb-2 rounded"><button class="btn btn-primary" (click)="saveButton()" [disabled]="!canAddUser" type="button"><i class="fas fa-file-contract"></i> Prompt</button></div></div>
+<!-- edit button here -->
+</div></div></div>
