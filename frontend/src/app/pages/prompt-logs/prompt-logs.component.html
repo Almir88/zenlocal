@@ -1,5 +1,8 @@
 <h2 class="section-title">Prompt logs</h2>
-<p class="section-desc">Logovi unosa u Prompt: tko je što unio, ime brancha, kada je prompt kreiran i kada je branch kreiran.</p>
+<p class="section-desc">
+  Prompt input logs: who entered what, branch name, when the prompt was created
+  and when the branch was created.
+</p>
 
 @if (loading) {
   <p class="muted">Loading…</p>
@@ -22,13 +25,19 @@
           @for (log of logs; track log.id) {
             <tr>
               <td class="user-cell">
-                {{ log.user?.name ?? '—' }}
-                <span class="user-email">{{ log.user?.email ?? '' }}</span>
+                {{ log.user?.name ?? "—" }}
+                <span class="user-email">{{ log.user?.email ?? "" }}</span>
               </td>
               <td class="prompt-cell">{{ log.prompt }}</td>
-              <td>{{ log.branchName ?? '—' }}</td>
-              <td>{{ log.createdAt | date:'medium' }}</td>
-              <td>{{ log.branchCreatedAt ? (log.branchCreatedAt | date:'medium') : '—' }}</td>
+              <td>{{ log.branchName ?? "—" }}</td>
+              <td>{{ log.createdAt | date: "medium" }}</td>
+              <td>
+                {{
+                  log.branchCreatedAt
+                    ? (log.branchCreatedAt | date: "medium")
+                    : "—"
+                }}
+              </td>
             </tr>
           }
         </tbody>
