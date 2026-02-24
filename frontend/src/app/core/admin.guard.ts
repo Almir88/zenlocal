@@ -1,11 +1,17 @@
-import { inject } from '@angular/core';
-import { Router } from '@angular/router';
-import { AuthService } from './auth.service';
+import { Injectable } from '@angular/core';
+import { CanActivate, Router } from '@angular/router';
+import { environment } from '../environments/environment';
 
-export const adminGuard = () => {
-  const auth = inject(AuthService);
-  const router = inject(Router);
-  if (auth.isAdmin()) return true;
-  router.navigate(['/']);
-  return false;
-};
+@Injectable({
+  providedIn: 'root'
+})
+export class AdminGuard implements CanActivate {
+  constructor(private router: Router) {}
+
+  canActivate(): boolean {
+    return environment.allowAdmin ? true : false;
+  }
+
+}
+
+// existing code...
