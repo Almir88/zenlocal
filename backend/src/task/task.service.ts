@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import { PromptLogService } from '../auth/prompt-log.service';
 import { ConsumptionService } from '../consumption/consumption.service';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { ChatDto } from './dto/chat.dto';
 
 const WORKSPACES_DIR = 'workspaces';
 
@@ -91,6 +92,53 @@ export class TaskService {
     return fallback
       ? { client: fallback, model, provider: providerName }
       : null;
+  }
+
+  async chat(dto: ChatDto): Promise<{ reply: string }> {
+    const resolved = this.getClientForProvider(
+      dto.ai_provider as AiProvider | undefined,
+    );
+    if (!resolved) {
+      throw new BadRequestException(
+        'No AI configured. Set OPENAI_API_KEY or GROQ_API_KEY in .env',
+      );
+    }
+    const { client, model, provider } = resolved;
+    const projectContext = this.getProjectContextForChat(dto.project);
+    const system =
+      'You are a helpful assistant. The user is working with a codebase and may ask questions or request implementations. Reply concisely in a friendly way. If they ask you to implement something, tell them to use the Implement button to apply changes to their branch.' +
+      (projectContext
+        ? `\n\nCurrent project context (user selected this in the app):\n${projectContext}`
+        : '');
+    try {
+      const completion = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: dto.message.trim() },
+        ],
+      });
+      const content = completion.choices[0]?.message?.content?.trim() ?? '';
+      if (completion.usage) {
+        await this.consumption.record(provider, model, completion.usage);
+      }
+      return { reply: content };
+    } catch (err: unknown) {
+      const msg =
+        (err as { error?: { message?: string }; message?: string })?.error
+          ?.message ??
+        (err as Error)?.message ??
+        'Chat request failed';
+      throw new BadRequestException(msg);
+    }
+  }
+
+  private getProjectContextForChat(project?: 'backend' | 'frontend'): string {
+    if (!project) return '';
+    if (project === 'frontend') {
+      return `Frontend: Angular SPA (Zenlocal). Sidebar nav: Prompt (/prompt), Logs (/prompt-logs, admin only), Consumption (/consumption, admin only), Users (/users, admin only; sub-routes: /users/add, /users/list). Main page is Prompt: chat with AI and "Implement" to apply changes on a branch. Layout: sidebar + header with user menu.`;
+    }
+    return `Backend: NestJS API. Endpoints: POST /task (create branch, AI edits, push, PR), POST /task/stream (same + NDJSON steps), POST /task/chat (conversational reply, no git). Auth: JWT, roles admin/user. Modules: auth, task, consumption, prompt-logs.`;
   }
 
   private getWorkspacePath(taskId: string): string {
@@ -296,15 +344,25 @@ CRITICAL RULES - you MUST follow these:
     return data.html_url ?? null;
   }
 
+  /** Optional callback to stream step-by-step messages to the client */
   async runTask(
     dto: CreateTaskDto,
     userId: string,
+    onStep?: (msg: { type: 'step'; message: string }) => void,
   ): Promise<{
     task_id: string;
     branch: string;
     pr_url: string | null;
     message: string;
   }> {
+    const step = (message: string) => onStep?.({ type: 'step', message });
+
+    if (dto.continue_on_branch && !dto.branch_name?.trim()) {
+      throw new BadRequestException(
+        'branch_name is required when continue_on_branch is true.',
+      );
+    }
+
     const { id: logId } = await this.promptLogs.log(
       userId,
       dto.prompt,
@@ -313,6 +371,7 @@ CRITICAL RULES - you MUST follow these:
     this.logger.log(
       `User ${userId} submitted prompt: "${dto.prompt.slice(0, 80)}${dto.prompt.length > 80 ? '...' : ''}"`,
     );
+    step('Starting task…');
     const fullRepoUrl = this.resolveRepoUrl(dto.repo_url ?? '');
     const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const workspacePath = this.getWorkspacePath(taskId);
@@ -320,16 +379,35 @@ CRITICAL RULES - you MUST follow these:
       dto.branch_name?.trim() ||
       `feature/ai-${dto.prompt.slice(0, 30).replace(/\W/g, '-').toLowerCase()}`;
 
+    const continueOnBranch = !!dto.continue_on_branch;
+    if (continueOnBranch) {
+      step(`Using existing branch: ${branchName}`);
+    } else {
+      step(`Creating branch: ${branchName}`);
+    }
+
     await fs.mkdir(path.join(process.cwd(), WORKSPACES_DIR), {
       recursive: true,
     });
     const git = simpleGit();
     const cloneUrl = this.repoUrlWithToken(fullRepoUrl);
 
-    await git.clone(cloneUrl, workspacePath, ['--depth', '1']);
+    step('Cloning repository…');
+    if (continueOnBranch) {
+      await git.clone(cloneUrl, workspacePath, [
+        '--depth',
+        '1',
+        '--branch',
+        branchName,
+      ]);
+    } else {
+      await git.clone(cloneUrl, workspacePath, ['--depth', '1']);
+    }
     const repo = simpleGit(workspacePath);
     await repo.remote(['set-url', 'origin', cloneUrl]);
-    await repo.checkoutLocalBranch(branchName);
+    if (!continueOnBranch) {
+      await repo.checkoutLocalBranch(branchName);
+    }
 
     const projectDir = dto.project ?? 'backend';
     const projectRoot = path.join(workspacePath, projectDir);
@@ -344,6 +422,7 @@ CRITICAL RULES - you MUST follow these:
       );
     }
 
+    step('Generating changes with AI…');
     let edits: FileEdit[] = [];
     try {
       edits = await this.generateEditsWithAI(
@@ -359,14 +438,31 @@ CRITICAL RULES - you MUST follow these:
     }
 
     if (edits.length > 0) {
+      step(
+        `Applying changes to ${edits.length} file(s): ${edits.map((e) => e.path).join(', ')}`,
+      );
       await this.applyEdits(projectRoot, edits);
       await repo.add('.');
       await repo.commit(`Applied: ${dto.prompt.slice(0, 80)}`);
+      step('Commit created.');
+    } else {
+      step('AI suggested no changes.');
     }
 
+    if (continueOnBranch) {
+      step('Pulling latest from origin…');
+      try {
+        await repo.pull('origin', branchName, ['--rebase']);
+      } catch {
+        // No upstream or already up to date; push will set upstream or succeed
+      }
+    }
+
+    step('Pushing to origin…');
     await repo.push('origin', branchName, ['-u']);
     await this.promptLogs.setBranchCreatedAt(logId);
 
+    step('Creating pull request…');
     const prUrl = await this.createPullRequest(
       fullRepoUrl,
       branchName,
@@ -376,6 +472,12 @@ CRITICAL RULES - you MUST follow these:
     await fs
       .rm(workspacePath, { recursive: true, force: true })
       .catch(() => {});
+
+    if (prUrl) {
+      step(`PR created: ${prUrl}`);
+    } else {
+      step('Branch pushed. You can open a PR manually in the repo.');
+    }
 
     return {
       task_id: taskId,

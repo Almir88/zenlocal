@@ -33,6 +33,13 @@ export class CreateTaskDto {
   branch_name?: string;
 
   @ApiPropertyOptional({
+    description:
+      'When true, use existing branch (branch_name required). New changes are applied on top of that branch instead of creating a new one.',
+  })
+  @IsOptional()
+  continue_on_branch?: boolean;
+
+  @ApiPropertyOptional({
     example: 'groq',
     description:
       'AI provider: groq, openai, sudodog, or frameworks (langchain, crewai, autogen, autogpt, botpress, rasa). Only groq/openai generate code. Uses first configured if omitted.',
