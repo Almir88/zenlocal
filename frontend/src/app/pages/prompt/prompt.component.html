@@ -1,17 +1,39 @@
 <h2 class="section-title">Prompt</h2>
 <p class="app-desc">
-  You describe in plain text what you want in the code, and the AI generates the
-  changes. It uses your GitHub repo: a new branch is created, edits are applied,
-  and a pull request is opened when needed. You can choose Groq, OpenAI, or
-  SudoDog (benchmark tool). Set API keys in .env for Groq/OpenAI. Admins see
-  prompt logs and can add users who can use Prompt as well.
+  Chat with the AI or ask it to implement changes. Use <strong>Send</strong> to
+  talk; use <strong>Implement</strong> to apply changes on a branch (new or
+  continue on same branch). Set API keys in .env for Groq/OpenAI.
 </p>
 <div class="card prompt-card">
-  <p class="card-desc">
-    Pick project, AI, type what you want done and optionally a branch name. Hit
-    Run to start.
-  </p>
-  <form [formGroup]="form" (ngSubmit)="onSubmit()" class="prompt-form">
+  @if (conversation.length > 0) {
+    <div class="conversation" #conversationContainer>
+      @for (msg of conversation; track $index) {
+        <div class="conversation-msg" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
+          @if (msg.role === 'user') {
+            <p class="msg-content">{{ msg.content }}</p>
+          } @else {
+            @if (msg.steps && msg.steps.length > 0) {
+              <div class="msg-steps">
+                @for (s of msg.steps; track $index) {
+                  <p class="msg-step">{{ s }}</p>
+                }
+              </div>
+            }
+            @if (msg.content) {
+              <p class="msg-content">{{ msg.content }}</p>
+            }
+          }
+        </div>
+      }
+      @if (loadingChat) {
+        <div class="conversation-msg assistant">
+          <p class="msg-content msg-loading">…</p>
+        </div>
+      }
+      <div #conversationEnd></div>
+    </div>
+  }
+  <form [formGroup]="form" class="prompt-form">
     <div class="form-row select-row">
       <div class="form-group">
         <label class="ai-label">Project</label>
@@ -40,19 +62,48 @@
     </div>
     <textarea
       formControlName="prompt"
-      placeholder="e.g. Add login page with email and password"
-      rows="4"
-      [disabled]="loading"
+      placeholder="Ask something or describe what to implement (e.g. Add login page)"
+      rows="3"
+      [disabled]="loading || loadingChat"
     ></textarea>
     @if (form.get("prompt")?.invalid && form.get("prompt")?.touched) {
       <p class="field-error">Prompt is required</p>
     }
-    <input
-      type="text"
-      formControlName="branchName"
-      placeholder="Branch name (optional)"
-      [disabled]="loading"
-    />
+    <div class="branch-row">
+      <input
+        type="text"
+        formControlName="branchName"
+        [placeholder]="
+          form.get('continueOnBranch')?.value
+            ? 'Branch name (required)'
+            : 'Branch name (optional)'
+        "
+        [disabled]="loading"
+        class="branch-input"
+      />
+      <label class="checkbox-label">
+        <input
+          type="checkbox"
+          formControlName="continueOnBranch"
+          [disabled]="loading"
+        />
+        Continue on same branch
+      </label>
+    </div>
+    @if (agentMessages.length > 0) {
+      <div class="agent-log" #agentLog>
+        @for (msg of agentMessages; track $index) {
+          <p
+            class="agent-msg"
+            [class.agent-step]="msg.type === 'step'"
+            [class.agent-result]="msg.type === 'result'"
+            [class.agent-error]="msg.type === 'error'"
+          >
+            {{ msg.message }}
+          </p>
+        }
+      </div>
+    }
     @if (error) {
       <p class="error">{{ error }}</p>
     }
@@ -66,8 +117,23 @@
         }
       </div>
     }
-    <button type="submit" [disabled]="form.invalid || loading">
-      {{ loading ? "Running..." : "Run" }}
-    </button>
+    <div class="form-actions">
+      <button
+        type="button"
+        class="btn-send"
+        (click)="sendChat()"
+        [disabled]="!form.get('prompt')?.value?.trim() || loading || loadingChat"
+      >
+        Send
+      </button>
+      <button
+        type="button"
+        class="btn-implement"
+        (click)="runImplement()"
+        [disabled]="form.invalid || loading || loadingChat"
+      >
+        {{ loading ? "Implementing…" : "Implement" }}
+      </button>
+    </div>
   </form>
 </div>
