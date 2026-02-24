@@ -1,0 +1,268 @@
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { simpleGit } from 'simple-git';
+import OpenAI from 'openai';
+import { PromptLogService } from '../auth/prompt-log.service';
+import { CreateTaskDto } from './dto/create-task.dto';
+
+const WORKSPACES_DIR = 'workspaces';
+
+interface FileEdit {
+  path: string;
+  content: string;
+}
+
+type AiProvider = 'groq' | 'openai';
+
+@Injectable()
+export class TaskService {
+  private readonly logger = new Logger(TaskService.name);
+  private groqClient: OpenAI | null = null;
+  private openaiClient: OpenAI | null = null;
+  private groqModel: string = 'llama-3.1-8b-instant';
+  private openaiModel: string = 'gpt-4o-mini';
+
+  constructor(
+    private config: ConfigService,
+    private promptLogs: PromptLogService,
+  ) {
+    const groqKey = this.config.get<string>('GROQ_API_KEY')?.trim();
+    const openaiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
+    if (groqKey) {
+      this.groqClient = new OpenAI({
+        baseURL: 'https://api.groq.com/openai/v1',
+        apiKey: groqKey,
+      });
+      this.groqModel = this.config.get('GROQ_MODEL', 'llama-3.1-8b-instant');
+      this.logger.log('Groq AI configured');
+    }
+    if (openaiKey) {
+      this.openaiClient = new OpenAI({ apiKey: openaiKey });
+      this.openaiModel = this.config.get('OPENAI_MODEL', 'gpt-4o-mini');
+      this.logger.log('OpenAI configured');
+    }
+  }
+
+  private getClientForProvider(provider: AiProvider | undefined): { client: OpenAI; model: string } | null {
+    const preferred = provider ?? (this.groqClient ? 'groq' : 'openai');
+    if (preferred === 'groq' && this.groqClient) {
+      return { client: this.groqClient, model: this.groqModel };
+    }
+    if (preferred === 'openai' && this.openaiClient) {
+      return { client: this.openaiClient, model: this.openaiModel };
+    }
+    const fallback = this.groqClient ?? this.openaiClient;
+    const model = this.groqClient ? this.groqModel : this.openaiModel;
+    return fallback ? { client: fallback, model } : null;
+  }
+
+  private getWorkspacePath(taskId: string): string {
+    return path.join(process.cwd(), WORKSPACES_DIR, taskId);
+  }
+
+  private safePath(workspacePath: string, relativePath: string): string {
+    const resolved = path.resolve(workspacePath, relativePath);
+    if (!resolved.startsWith(workspacePath)) {
+      throw new BadRequestException('Invalid file path');
+    }
+    return resolved;
+  }
+
+  private async listProjectContext(workspacePath: string): Promise<string> {
+    const lines: string[] = [];
+    const skip = new Set(['.git', 'node_modules', 'dist', 'build', '.next']);
+    const ext = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.json', '.html', '.css', '.md']);
+    async function walk(dir: string, prefix: string) {
+      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const e of entries) {
+        if (skip.has(e.name)) continue;
+        const rel = path.join(prefix, e.name);
+        if (e.isDirectory()) {
+          await walk(path.join(dir, e.name), rel);
+        } else if (ext.has(path.extname(e.name))) {
+          lines.push(rel);
+        }
+      }
+    }
+    await walk(workspacePath, '');
+    return lines.slice(0, 80).join('\n');
+  }
+
+  private async generateEditsWithAI(
+    workspacePath: string,
+    prompt: string,
+    aiProvider?: AiProvider,
+  ): Promise<FileEdit[]> {
+    const resolved = this.getClientForProvider(aiProvider);
+    if (!resolved) {
+      throw new BadRequestException(
+        'No AI configured. Set OPENAI_API_KEY or GROQ_API_KEY (free at console.groq.com) in .env',
+      );
+    }
+    const { client, model } = resolved;
+    const structure = await this.listProjectContext(workspacePath);
+    const system = `You are a code generator. Given a project file list and a user request, output a JSON object with a single key "files" that is an array of file changes.
+Each item in "files" must be: { "path": "relative/path/from/root", "content": "full file content as string" }.
+Only include files you create or modify. Use path relative to project root. Output only the JSON object, no markdown.`;
+    const user = `Project files (relative paths):\n${structure}\n\nUser request: ${prompt}`;
+    let completion: Awaited<ReturnType<OpenAI['chat']['completions']['create']>>;
+    try {
+      completion = await client.chat.completions.create({
+        model,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        response_format: { type: 'json_object' },
+      });
+    } catch (err: unknown) {
+      const msg =
+        (err as { status?: number; code?: string; error?: { message?: string }; message?: string })?.error?.message ??
+        (err as Error)?.message ??
+        'OpenAI request failed';
+      const isQuota = (err as { status?: number; code?: string }).status === 429 || (err as { code?: string }).code === 'insufficient_quota';
+      throw new BadRequestException(isQuota ? 'OpenAI quota exceeded. Add billing or check usage at platform.openai.com.' : msg);
+    }
+    const raw = completion.choices[0]?.message?.content?.trim();
+    if (!raw) throw new BadRequestException('AI returned no content');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new BadRequestException('AI returned invalid JSON');
+    }
+    const obj = parsed as Record<string, unknown>;
+    const arr = (Array.isArray(obj.files) ? obj.files : []) as FileEdit[];
+    return (arr as FileEdit[]).filter((x) => x?.path && typeof x.content === 'string');
+  }
+
+  private async applyEdits(workspacePath: string, edits: FileEdit[]): Promise<void> {
+    for (const { path: relPath, content } of edits) {
+      const fullPath = this.safePath(workspacePath, relPath);
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, content, 'utf-8');
+    }
+  }
+
+  private parseRepoOwnerName(repoUrl: string): { owner: string; repo: string } | null {
+    const m = repoUrl.match(/github\.com[/:](\w[\w.-]*)\/([\w.-]+?)(?:\.git)?$/i);
+    return m ? { owner: m[1], repo: m[2].replace(/\.git$/, '') } : null;
+  }
+
+  private resolveRepoUrl(repoUrl: string): string {
+    if (!repoUrl?.trim()) {
+      const defaultUrl = this.config.get<string>('DEFAULT_REPO_URL')?.trim();
+      if (!defaultUrl) throw new BadRequestException('Send repo_url or set DEFAULT_REPO_URL in .env');
+      return defaultUrl;
+    }
+    if (/^https?:\/\//i.test(repoUrl)) return repoUrl;
+    const owner = this.config.get<string>('GITHUB_DEFAULT_OWNER');
+    if (!owner) throw new BadRequestException('Use full repo URL or set GITHUB_DEFAULT_OWNER in .env');
+    const repo = repoUrl.replace(/\.git$/i, '').trim();
+    return `https://github.com/${owner}/${repo}.git`;
+  }
+
+  private repoUrlWithToken(repoUrl: string): string {
+    const token = this.config.get<string>('GITHUB_TOKEN');
+    if (!token) return repoUrl;
+    const meta = this.parseRepoOwnerName(repoUrl);
+    if (!meta) return repoUrl;
+    return `https://x-access-token:${token}@github.com/${meta.owner}/${meta.repo}.git`;
+  }
+
+  private async createPullRequest(
+    repoUrl: string,
+    branch: string,
+    title: string,
+  ): Promise<string | null> {
+    const token = this.config.get<string>('GITHUB_TOKEN');
+    if (!token) return null;
+    const meta = this.parseRepoOwnerName(repoUrl);
+    if (!meta) return null;
+    const res = await fetch(
+      `https://api.github.com/repos/${meta.owner}/${meta.repo}/pulls`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: title || `AI: ${branch}`,
+          head: branch,
+          base: 'main',
+          body: 'Created by Zenlocal AI',
+        }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { html_url?: string };
+    return data.html_url ?? null;
+  }
+
+  async runTask(
+    dto: CreateTaskDto,
+    userId: string,
+  ): Promise<{
+    task_id: string;
+    branch: string;
+    pr_url: string | null;
+    message: string;
+  }> {
+    const { id: logId } = await this.promptLogs.log(
+      userId,
+      dto.prompt,
+      dto.branch_name?.trim() ?? null,
+    );
+    this.logger.log(`User ${userId} submitted prompt: "${dto.prompt.slice(0, 80)}${dto.prompt.length > 80 ? '...' : ''}"`);
+    const fullRepoUrl = this.resolveRepoUrl(dto.repo_url ?? '');
+    const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const workspacePath = this.getWorkspacePath(taskId);
+    const branchName =
+      dto.branch_name?.trim() ||
+      `feature/ai-${dto.prompt.slice(0, 30).replace(/\W/g, '-').toLowerCase()}`;
+
+    await fs.mkdir(path.join(process.cwd(), WORKSPACES_DIR), { recursive: true });
+    const git = simpleGit();
+    const cloneUrl = this.repoUrlWithToken(fullRepoUrl);
+
+    await git.clone(cloneUrl, workspacePath, ['--depth', '1']);
+    const repo = simpleGit(workspacePath);
+    await repo.remote(['set-url', 'origin', cloneUrl]);
+    await repo.checkoutLocalBranch(branchName);
+
+    let edits: FileEdit[] = [];
+    try {
+      edits = await this.generateEditsWithAI(workspacePath, dto.prompt, dto.ai_provider);
+    } catch (e) {
+      await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {});
+      throw e;
+    }
+
+    if (edits.length > 0) {
+      await this.applyEdits(workspacePath, edits);
+      await repo.add('.');
+      await repo.commit(`Applied: ${dto.prompt.slice(0, 80)}`);
+    }
+
+    await repo.push('origin', branchName, ['-u']);
+    await this.promptLogs.setBranchCreatedAt(logId);
+
+    const prUrl = await this.createPullRequest(
+      fullRepoUrl,
+      branchName,
+      `AI: ${dto.prompt.slice(0, 60)}`,
+    );
+
+    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {});
+
+    return {
+      task_id: taskId,
+      branch: branchName,
+      pr_url: prUrl,
+      message: prUrl
+        ? `Branch ${branchName} pushed and PR created.`
+        : `Branch ${branchName} pushed. Create PR manually from your repo.`,
+    };
+  }
+}
