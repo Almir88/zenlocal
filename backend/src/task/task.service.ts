@@ -536,6 +536,7 @@ CRITICAL RULES - you MUST follow these:
     branch: string;
     pr_url: string | null;
     message: string;
+    applied_files: string[];
   }> {
     const step = (message: string) => onStep?.({ type: 'step', message });
 
@@ -722,6 +723,45 @@ CRITICAL RULES - you MUST follow these:
       message: prUrl
         ? `Branch ${branchName} pushed and PR created.`
         : `Branch ${branchName} pushed. Create PR manually from your repo.`,
+      applied_files: edits.map((e) => e.path),
     };
+  }
+
+  async listProjectFiles(
+    repoUrl?: string,
+    project: 'backend' | 'frontend' = 'backend',
+  ): Promise<{ name: string; type: 'dir' | 'file'; path: string }[]> {
+    const fullRepoUrl = this.resolveRepoUrl(repoUrl ?? '');
+    const meta = this.parseRepoOwnerName(fullRepoUrl);
+    if (!meta) {
+      throw new BadRequestException(
+        'Could not parse repo from URL. Use a full GitHub URL.',
+      );
+    }
+    const token = this.config.get<string>('GITHUB_TOKEN');
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `https://api.github.com/repos/${meta.owner}/${meta.repo}/contents/${project}`,
+      { headers },
+    );
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new BadRequestException(
+        err?.message ?? `Failed to list files (${res.status})`,
+      );
+    }
+    const data = (await res.json()) as Array<{
+      name: string;
+      type: string;
+      path?: string;
+    }>;
+    return data.map((item) => ({
+      name: item.name,
+      type: item.type === 'dir' ? 'dir' : 'file',
+      path: item.path ?? `${project}/${item.name}`,
+    }));
   }
 }

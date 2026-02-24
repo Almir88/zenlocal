@@ -1,0 +1,118 @@
+.section-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #212121;
+}
+
+.section-desc {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: #616161;
+}
+
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+
+  th,
+  td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+
+  th {
+    font-weight: 600;
+    color: #424242;
+    background: #fafafa;
+  }
+
+  .name-cell {
+    font-weight: 500;
+  }
+
+  .role-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    background: #e0e0e0;
+    color: #424242;
+
+    &.role-admin {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+  }
+}
+
+.error {
+  color: #c62828;
+  margin: 0;
+}
+
+.muted {
+  margin: 0;
+  color: #9e9e9e;
+  font-size: 0.9rem;
+}
+
+// Dark mode
+:host-context([data-theme="dark"]) {
+  .section-title {
+    color: #e8eaed;
+  }
+
+  .section-desc {
+    color: #9aa0a6;
+  }
+
+  .card {
+    background: #202124;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .users-table {
+    th,
+    td {
+      border-bottom-color: #3c4043;
+      color: #e8eaed;
+    }
+
+    th {
+      color: #e8eaed;
+      background: #292a2d;
+    }
+
+    .role-badge {
+      background: #3c4043;
+      color: #e8eaed;
+
+      &.role-admin {
+        background: #2d2f31;
+        color: #8ab4f8;
+      }
+    }
+  }
+
+  .error {
+    color: #f28b82;
+  }
+
+  .muted {
+    color: #9aa0a6;
+  }
+}

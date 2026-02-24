@@ -56,6 +56,27 @@ export class TaskController {
     return this.taskService.listBranches(repoUrl);
   }
 
+  @Get('repo-files')
+  @ApiOperation({
+    summary:
+      'List top-level files/folders in the selected project (frontend/backend)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of { name, type, path }',
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async listRepoFiles(
+    @Query('repo_url') repoUrl?: string,
+    @Query('project') project?: 'backend' | 'frontend',
+  ) {
+    return this.taskService.listProjectFiles(
+      repoUrl,
+      project === 'frontend' ? 'frontend' : 'backend',
+    );
+  }
+
   @Post('chat')
   @ApiOperation({ summary: 'Chat with the AI (no git, conversational reply)' })
   @ApiResponse({ status: 201, description: 'AI reply' })

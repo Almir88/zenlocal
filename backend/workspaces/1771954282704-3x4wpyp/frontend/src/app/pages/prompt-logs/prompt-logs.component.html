@@ -1,0 +1,50 @@
+<h2 class="section-title">Prompt logs</h2>
+<p class="section-desc">
+  Prompt input logs: who entered what, branch name, when the prompt was created
+  and when the branch was created.
+</p>
+
+@if (loading) {
+  <p class="muted">Loading…</p>
+} @else if (error) {
+  <p class="error">{{ error }}</p>
+} @else {
+  <div class="card logs-card">
+    <div class="table-wrap">
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Prompt</th>
+            <th>Branch</th>
+            <th>Created at</th>
+            <th>Branch created at</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (log of logs; track log.id) {
+            <tr>
+              <td class="user-cell">
+                {{ log.user?.name ?? "—" }}
+                <span class="user-email">{{ log.user?.email ?? "" }}</span>
+              </td>
+              <td class="prompt-cell">{{ log.prompt }}</td>
+              <td>{{ log.branchName ?? "—" }}</td>
+              <td>{{ log.createdAt | date: "medium" }}</td>
+              <td>
+                {{
+                  log.branchCreatedAt
+                    ? (log.branchCreatedAt | date: "medium")
+                    : "—"
+                }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (logs.length === 0) {
+      <p class="muted">No logs yet.</p>
+    }
+  </div>
+}

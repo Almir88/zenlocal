@@ -1,0 +1,56 @@
+.users-page {
+  max-width: 900px;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.tab {
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #616161;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+
+  &:hover {
+    color: #1565c0;
+  }
+
+  &.active {
+    color: #1565c0;
+    border-bottom-color: #1565c0;
+  }
+}
+
+.tab-content {
+  min-height: 200px;
+}
+
+// Dark mode
+:host-context([data-theme="dark"]) {
+  .tabs {
+    border-bottom-color: #3c4043;
+  }
+
+  .tab {
+    color: #9aa0a6;
+
+    &:hover {
+      color: #8ab4f8;
+    }
+
+    &.active {
+      color: #8ab4f8;
+      border-bottom-color: #8ab4f8;
+    }
+  }
+}
