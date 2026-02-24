@@ -1,13 +1,23 @@
 import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+
+declare interface SidebarItem {
+  label: string;
+  link: string;
+}
 
 @Component({
-  selector: 'app-root',
-  standalone: true,
-  imports: [RouterOutlet],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+  selector: 'app-sidebar',
+  templateUrl: './sidebar.component.html',
+  styleUrls: ['./sidebar.component.css']
 })
 export class AppComponent {
-  title = 'frontend';
+  title = 'test';
+  readonly sidebar = [
+    ...
+    {
+      label: 'test',
+      link: 'test',
+    }
+  ];
 }
+

@@ -1,0 +1,14 @@
+// ... existing code ...
+
+<mat-list>
+  // ... existing code ...
+  <a *ngFor='let item of sidebar;' mat-list-item>
+    <span mat-line>
+      <span class='nav-icon'>
+        {{ item.label }}
+      </span>
+      {{ item.label }}
+    </span>
+    <mat-icon matSuffix>chevron_right</mat-icon>
+  </a>
+</mat-list>
