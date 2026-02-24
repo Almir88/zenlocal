@@ -1,7 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-export type AiProvider = 'groq' | 'openai';
+export type AiProvider =
+  | 'groq'
+  | 'openai'
+  | 'sudodog'
+  | 'langchain'
+  | 'crewai'
+  | 'autogen'
+  | 'autogpt'
+  | 'botpress'
+  | 'rasa';
 
 export class CreateTaskDto {
   @ApiPropertyOptional({
@@ -25,16 +34,28 @@ export class CreateTaskDto {
 
   @ApiPropertyOptional({
     example: 'groq',
-    description: 'AI provider: groq or openai. Uses first configured if omitted.',
+    description:
+      'AI provider: groq, openai, sudodog, or frameworks (langchain, crewai, autogen, autogpt, botpress, rasa). Only groq/openai generate code. Uses first configured if omitted.',
   })
   @IsString()
-  @IsIn(['groq', 'openai'])
+  @IsIn([
+    'groq',
+    'openai',
+    'sudodog',
+    'langchain',
+    'crewai',
+    'autogen',
+    'autogpt',
+    'botpress',
+    'rasa',
+  ])
   @IsOptional()
   ai_provider?: AiProvider;
 
   @ApiPropertyOptional({
     example: 'backend',
-    description: 'Project root in repo: backend or frontend. AI will only list and edit files under this folder.',
+    description:
+      'Project root in repo: backend or frontend. AI will only list and edit files under this folder.',
   })
   @IsString()
   @IsIn(['backend', 'frontend'])

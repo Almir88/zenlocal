@@ -9,6 +9,7 @@ import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UsersService } from './users.service';
 import { PromptLogService } from './prompt-log.service';
+import { ConsumptionService } from '../consumption/consumption.service';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -17,6 +18,7 @@ export class AuthController {
     private auth: AuthService,
     private users: UsersService,
     private promptLogs: PromptLogService,
+    private consumption: ConsumptionService,
   ) {}
 
   @Post('token')
@@ -68,5 +70,14 @@ export class AuthController {
   @ApiOperation({ summary: 'List prompt logs (admin only)' })
   listPromptLogs() {
     return this.promptLogs.findAll();
+  }
+
+  @Get('consumption')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Monthly AI usage (admin only)' })
+  getConsumption() {
+    return this.consumption.getMonthly(24);
   }
 }

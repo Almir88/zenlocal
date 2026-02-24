@@ -5,6 +5,7 @@ import * as path from 'path';
 import { simpleGit } from 'simple-git';
 import OpenAI from 'openai';
 import { PromptLogService } from '../auth/prompt-log.service';
+import { ConsumptionService } from '../consumption/consumption.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 
 const WORKSPACES_DIR = 'workspaces';
@@ -14,7 +15,26 @@ interface FileEdit {
   content: string;
 }
 
-type AiProvider = 'groq' | 'openai';
+type AiProvider =
+  | 'groq'
+  | 'openai'
+  | 'sudodog'
+  | 'langchain'
+  | 'crewai'
+  | 'autogen'
+  | 'autogpt'
+  | 'botpress'
+  | 'rasa';
+
+const FRAMEWORK_PROVIDERS: AiProvider[] = [
+  'sudodog',
+  'langchain',
+  'crewai',
+  'autogen',
+  'autogpt',
+  'botpress',
+  'rasa',
+];
 
 @Injectable()
 export class TaskService {
@@ -27,6 +47,7 @@ export class TaskService {
   constructor(
     private config: ConfigService,
     private promptLogs: PromptLogService,
+    private consumption: ConsumptionService,
   ) {
     const groqKey = this.config.get<string>('GROQ_API_KEY')?.trim();
     const openaiKey = this.config.get<string>('OPENAI_API_KEY')?.trim();
@@ -45,17 +66,31 @@ export class TaskService {
     }
   }
 
-  private getClientForProvider(provider: AiProvider | undefined): { client: OpenAI; model: string } | null {
+  private getClientForProvider(
+    provider: AiProvider | undefined,
+  ): { client: OpenAI; model: string; provider: string } | null {
+    if (provider && FRAMEWORK_PROVIDERS.includes(provider)) return null;
     const preferred = provider ?? (this.groqClient ? 'groq' : 'openai');
     if (preferred === 'groq' && this.groqClient) {
-      return { client: this.groqClient, model: this.groqModel };
+      return {
+        client: this.groqClient,
+        model: this.groqModel,
+        provider: 'groq',
+      };
     }
     if (preferred === 'openai' && this.openaiClient) {
-      return { client: this.openaiClient, model: this.openaiModel };
+      return {
+        client: this.openaiClient,
+        model: this.openaiModel,
+        provider: 'openai',
+      };
     }
     const fallback = this.groqClient ?? this.openaiClient;
     const model = this.groqClient ? this.groqModel : this.openaiModel;
-    return fallback ? { client: fallback, model } : null;
+    const providerName = this.groqClient ? 'groq' : 'openai';
+    return fallback
+      ? { client: fallback, model, provider: providerName }
+      : null;
   }
 
   private getWorkspacePath(taskId: string): string {
@@ -73,9 +108,21 @@ export class TaskService {
   private async listProjectContext(workspacePath: string): Promise<string> {
     const lines: string[] = [];
     const skip = new Set(['.git', 'node_modules', 'dist', 'build', '.next']);
-    const ext = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.json', '.html', '.css', '.md']);
+    const ext = new Set([
+      '.ts',
+      '.tsx',
+      '.js',
+      '.jsx',
+      '.py',
+      '.json',
+      '.html',
+      '.css',
+      '.md',
+    ]);
     async function walk(dir: string, prefix: string) {
-      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      const entries = await fs
+        .readdir(dir, { withFileTypes: true })
+        .catch(() => []);
       for (const e of entries) {
         if (skip.has(e.name)) continue;
         const rel = path.join(prefix, e.name);
@@ -95,13 +142,18 @@ export class TaskService {
     prompt: string,
     aiProvider?: AiProvider,
   ): Promise<FileEdit[]> {
+    if (aiProvider && FRAMEWORK_PROVIDERS.includes(aiProvider)) {
+      throw new BadRequestException(
+        'This option is a framework or benchmark tool, not a model for code generation. Use Groq or OpenAI for this task.',
+      );
+    }
     const resolved = this.getClientForProvider(aiProvider);
     if (!resolved) {
       throw new BadRequestException(
         'No AI configured. Set OPENAI_API_KEY or GROQ_API_KEY (free at console.groq.com) in .env',
       );
     }
-    const { client, model } = resolved;
+    const { client, model, provider } = resolved;
     const structure = await this.listProjectContext(workspacePath);
     const system = `You are a code generator. Given a project file list and a user request, output a JSON object with a single key "files" that is an array of file changes.
 Each item in "files" must be: { "path": "relative/path/from/root", "content": "full file content as string" }.
@@ -115,23 +167,44 @@ CRITICAL RULES - you MUST follow these:
 5. SAME STYLE: Match the existing code style, indentation, and patterns in the file (e.g. if links use routerLink and a nav-icon span, the new link must use the same structure).
 6. FULL FILE: For each modified file, output the complete file content with your change applied in the correct place.`;
     const user = `Project files (relative paths):\n${structure}\n\nUser request: ${prompt}`;
-    let completion: Awaited<ReturnType<OpenAI['chat']['completions']['create']>>;
+    let completion: Awaited<
+      ReturnType<OpenAI['chat']['completions']['create']>
+    >;
     try {
       completion = await client.chat.completions.create({
         model,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
         response_format: { type: 'json_object' },
       });
     } catch (err: unknown) {
       const msg =
-        (err as { status?: number; code?: string; error?: { message?: string }; message?: string })?.error?.message ??
+        (
+          err as {
+            status?: number;
+            code?: string;
+            error?: { message?: string };
+            message?: string;
+          }
+        )?.error?.message ??
         (err as Error)?.message ??
         'OpenAI request failed';
-      const isQuota = (err as { status?: number; code?: string }).status === 429 || (err as { code?: string }).code === 'insufficient_quota';
-      throw new BadRequestException(isQuota ? 'OpenAI quota exceeded. Add billing or check usage at platform.openai.com.' : msg);
+      const isQuota =
+        (err as { status?: number; code?: string }).status === 429 ||
+        (err as { code?: string }).code === 'insufficient_quota';
+      throw new BadRequestException(
+        isQuota
+          ? 'OpenAI quota exceeded. Add billing or check usage at platform.openai.com.'
+          : msg,
+      );
     }
     const raw = completion.choices[0]?.message?.content?.trim();
     if (!raw) throw new BadRequestException('AI returned no content');
+    if (completion.usage) {
+      await this.consumption.record(provider, model, completion.usage);
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -140,10 +213,15 @@ CRITICAL RULES - you MUST follow these:
     }
     const obj = parsed as Record<string, unknown>;
     const arr = (Array.isArray(obj.files) ? obj.files : []) as FileEdit[];
-    return (arr as FileEdit[]).filter((x) => x?.path && typeof x.content === 'string');
+    return (arr as FileEdit[]).filter(
+      (x) => x?.path && typeof x.content === 'string',
+    );
   }
 
-  private async applyEdits(workspacePath: string, edits: FileEdit[]): Promise<void> {
+  private async applyEdits(
+    workspacePath: string,
+    edits: FileEdit[],
+  ): Promise<void> {
     for (const { path: relPath, content } of edits) {
       const fullPath = this.safePath(workspacePath, relPath);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -151,20 +229,30 @@ CRITICAL RULES - you MUST follow these:
     }
   }
 
-  private parseRepoOwnerName(repoUrl: string): { owner: string; repo: string } | null {
-    const m = repoUrl.match(/github\.com[/:](\w[\w.-]*)\/([\w.-]+?)(?:\.git)?$/i);
+  private parseRepoOwnerName(
+    repoUrl: string,
+  ): { owner: string; repo: string } | null {
+    const m = repoUrl.match(
+      /github\.com[/:](\w[\w.-]*)\/([\w.-]+?)(?:\.git)?$/i,
+    );
     return m ? { owner: m[1], repo: m[2].replace(/\.git$/, '') } : null;
   }
 
   private resolveRepoUrl(repoUrl: string): string {
     if (!repoUrl?.trim()) {
       const defaultUrl = this.config.get<string>('DEFAULT_REPO_URL')?.trim();
-      if (!defaultUrl) throw new BadRequestException('Send repo_url or set DEFAULT_REPO_URL in .env');
+      if (!defaultUrl)
+        throw new BadRequestException(
+          'Send repo_url or set DEFAULT_REPO_URL in .env',
+        );
       return defaultUrl;
     }
     if (/^https?:\/\//i.test(repoUrl)) return repoUrl;
     const owner = this.config.get<string>('GITHUB_DEFAULT_OWNER');
-    if (!owner) throw new BadRequestException('Use full repo URL or set GITHUB_DEFAULT_OWNER in .env');
+    if (!owner)
+      throw new BadRequestException(
+        'Use full repo URL or set GITHUB_DEFAULT_OWNER in .env',
+      );
     const repo = repoUrl.replace(/\.git$/i, '').trim();
     return `https://github.com/${owner}/${repo}.git`;
   }
@@ -222,7 +310,9 @@ CRITICAL RULES - you MUST follow these:
       dto.prompt,
       dto.branch_name?.trim() ?? null,
     );
-    this.logger.log(`User ${userId} submitted prompt: "${dto.prompt.slice(0, 80)}${dto.prompt.length > 80 ? '...' : ''}"`);
+    this.logger.log(
+      `User ${userId} submitted prompt: "${dto.prompt.slice(0, 80)}${dto.prompt.length > 80 ? '...' : ''}"`,
+    );
     const fullRepoUrl = this.resolveRepoUrl(dto.repo_url ?? '');
     const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const workspacePath = this.getWorkspacePath(taskId);
@@ -230,7 +320,9 @@ CRITICAL RULES - you MUST follow these:
       dto.branch_name?.trim() ||
       `feature/ai-${dto.prompt.slice(0, 30).replace(/\W/g, '-').toLowerCase()}`;
 
-    await fs.mkdir(path.join(process.cwd(), WORKSPACES_DIR), { recursive: true });
+    await fs.mkdir(path.join(process.cwd(), WORKSPACES_DIR), {
+      recursive: true,
+    });
     const git = simpleGit();
     const cloneUrl = this.repoUrlWithToken(fullRepoUrl);
 
@@ -244,15 +336,25 @@ CRITICAL RULES - you MUST follow these:
     try {
       await fs.access(projectRoot);
     } catch {
-      await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {});
-      throw new BadRequestException(`Project folder "${projectDir}" not found in repo.`);
+      await fs
+        .rm(workspacePath, { recursive: true, force: true })
+        .catch(() => {});
+      throw new BadRequestException(
+        `Project folder "${projectDir}" not found in repo.`,
+      );
     }
 
     let edits: FileEdit[] = [];
     try {
-      edits = await this.generateEditsWithAI(projectRoot, dto.prompt, dto.ai_provider);
+      edits = await this.generateEditsWithAI(
+        projectRoot,
+        dto.prompt,
+        dto.ai_provider,
+      );
     } catch (e) {
-      await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {});
+      await fs
+        .rm(workspacePath, { recursive: true, force: true })
+        .catch(() => {});
       throw e;
     }
 
@@ -271,7 +373,9 @@ CRITICAL RULES - you MUST follow these:
       `AI: ${dto.prompt.slice(0, 60)}`,
     );
 
-    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {});
+    await fs
+      .rm(workspacePath, { recursive: true, force: true })
+      .catch(() => {});
 
     return {
       task_id: taskId,

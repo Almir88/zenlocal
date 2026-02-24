@@ -5,9 +5,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { TaskModule } from './task/task.module';
+import { ConsumptionModule } from './consumption/consumption.module';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
 import { PromptLog } from './entities/prompt-log.entity';
+import { AiUsageLog } from './entities/ai-usage-log.entity';
 
 @Module({
   imports: [
@@ -28,7 +30,7 @@ import { PromptLog } from './entities/prompt-log.entity';
                 password: config.get<string>('DATABASE_PASSWORD'),
                 database: config.get<string>('DATABASE_NAME', 'zenlocal'),
               }),
-          entities: [Role, User, PromptLog],
+          entities: [Role, User, PromptLog, AiUsageLog],
           synchronize: false,
           logging: config.get<string>('LOG_LEVEL') === 'debug',
         };
@@ -37,6 +39,7 @@ import { PromptLog } from './entities/prompt-log.entity';
     }),
     AuthModule,
     TaskModule,
+    ConsumptionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

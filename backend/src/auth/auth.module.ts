@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
+import { ConsumptionModule } from '../consumption/consumption.module';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersService } from './users.service';
@@ -16,6 +17,7 @@ import { PromptLog } from '../entities/prompt-log.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Role, PromptLog]),
+    ConsumptionModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -29,7 +31,13 @@ import { PromptLog } from '../entities/prompt-log.entity';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, UsersService, PromptLogService, SeedService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    UsersService,
+    PromptLogService,
+    SeedService,
+  ],
   exports: [AuthService, JwtModule, UsersService, PromptLogService],
 })
 export class AuthModule {}
