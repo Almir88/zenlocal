@@ -231,16 +231,25 @@ Only include files you create or modify. Use path relative to project root. Outp
     await repo.remote(['set-url', 'origin', cloneUrl]);
     await repo.checkoutLocalBranch(branchName);
 
+    const projectDir = dto.project ?? 'backend';
+    const projectRoot = path.join(workspacePath, projectDir);
+    try {
+      await fs.access(projectRoot);
+    } catch {
+      await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {});
+      throw new BadRequestException(`Project folder "${projectDir}" not found in repo.`);
+    }
+
     let edits: FileEdit[] = [];
     try {
-      edits = await this.generateEditsWithAI(workspacePath, dto.prompt, dto.ai_provider);
+      edits = await this.generateEditsWithAI(projectRoot, dto.prompt, dto.ai_provider);
     } catch (e) {
       await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {});
       throw e;
     }
 
     if (edits.length > 0) {
-      await this.applyEdits(workspacePath, edits);
+      await this.applyEdits(projectRoot, edits);
       await repo.add('.');
       await repo.commit(`Applied: ${dto.prompt.slice(0, 80)}`);
     }

@@ -31,4 +31,13 @@ export class CreateTaskDto {
   @IsIn(['groq', 'openai'])
   @IsOptional()
   ai_provider?: AiProvider;
+
+  @ApiPropertyOptional({
+    example: 'backend',
+    description: 'Project root in repo: backend or frontend. AI will only list and edit files under this folder.',
+  })
+  @IsString()
+  @IsIn(['backend', 'frontend'])
+  @IsOptional()
+  project?: 'backend' | 'frontend';
 }

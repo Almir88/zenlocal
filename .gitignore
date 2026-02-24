@@ -1,0 +1,19 @@
+.env
+*.env
+!*.env.example
+workspaces/
+
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.nest/
+
+# Backend: track source, keep ignoring node_modules, dist, and .env inside it
+!/backend/
+!/backend/**
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/*.env
+!backend/*.env.example

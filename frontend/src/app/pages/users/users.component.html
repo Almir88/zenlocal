@@ -1,0 +1,18 @@
+<div class="users-page">
+  <div class="tabs">
+    <a
+      routerLink="/users/add"
+      routerLinkActive="active"
+      [routerLinkActiveOptions]="{ exact: true }"
+      class="tab"
+    >
+      Add user
+    </a>
+    <a routerLink="/users/list" routerLinkActive="active" class="tab">
+      All users
+    </a>
+  </div>
+  <div class="tab-content">
+    <router-outlet></router-outlet>
+  </div>
+</div>
