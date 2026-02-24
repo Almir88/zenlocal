@@ -1,153 +1,23 @@
-<div class="layout">
-  <aside class="sidebar">
-    <div class="sidebar-brand">
-      <img src="zen-logo.svg" alt="Zen" class="sidebar-logo" />
-      <span class="brand-text"
-        ><span class="brand-zen">zen</span
-        ><span class="brand-operator"> prompt</span></span
-      >
-    </div>
-    <nav class="sidebar-nav">
-      <a
-        routerLink="/prompt"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-        class="nav-item"
-      >
-        <span class="nav-icon" aria-hidden="true">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-            />
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
-        </span>
-        Prompt
-      </a>
-      @if (auth.isAdmin()) {
-        <a routerLink="/prompt-logs" routerLinkActive="active" class="nav-item">
-          <span class="nav-icon" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path
-                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-              />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-              <polyline points="10 9 9 9 8 9" />
-            </svg>
-          </span>
-          Logs
-        </a>
-        <a routerLink="/consumption" routerLinkActive="active" class="nav-item">
-          <span class="nav-icon" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 3v18h18" />
-              <path d="m19 9-5 5-4-4-3 3" />
-            </svg>
-          </span>
-          Consumption
-        </a>
-        <a routerLink="/users" routerLinkActive="active" class="nav-item">
-          <span class="nav-icon" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </span>
-          Users
-        </a>
-      }
-    </nav>
-  </aside>
-  <div class="main">
-    <header class="header">
-      <h1 class="page-title">{{ pageTitle }}</h1>
-      <div class="user-profile-wrap">
-        <button
-          type="button"
-          class="user-profile-pill"
-          (click)="toggleUserMenu()"
-          [attr.aria-expanded]="userMenuOpen"
-          aria-haspopup="true"
-        >
-          <span class="user-avatar" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </span>
-          <span class="user-greeting">
-            <span class="welcome-line">Welcome back ✋</span>
-            <span class="user-name">{{
-              auth.currentUser()?.name ?? "User"
-            }}</span>
-          </span>
-          <span class="user-chevron" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </span>
-        </button>
-        @if (userMenuOpen) {
-          <div class="user-dropdown-menu">
-            <button
-              type="button"
-              class="user-dropdown-item"
-              (click)="auth.logout(); closeUserMenu()"
-            >
-              Logout
-            </button>
-          </div>
-        }
-      </div>
-    </header>
-    <main class="content">
-      <router-outlet></router-outlet>
-    </main>
-  </div>
-</div>
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+  <a class="navbar-brand" routerLink="/home" [routerLinkActive]="nav-active">
+    <span class="nav-icon fa fa-home"></span> Home
+  </a>
+  <a class="navbar-brand" routerLink="/login">
+    <span class="nav-icon fa fa-sign-in"></span> Login
+  </a>
+  <a class="navbar-brand" routerLink="/register">
+    <span class="nav-icon fa fa-user"></span> Register
+  </a>
+  <a class="navbar-brand" routerLink="/forgot-password">
+    <span class="nav-icon fa fa-lock"></span> Forgot Password
+  </a>
+  <a class="navbar-brand" routerLink="/test-item" *ngIf="false">
+    <span class="nav-icon fa fa-undo"></span> Test Item
+  </a>
+  <a class="navbar-brand" routerLink="/profile">
+    <span class="nav-icon fa fa-user"></span> Profile
+  </a>
+  <a class="navbar-brand" routerLink="/settings">
+    <span class="nav-icon fa fa-cog"></span> Settings
+  </a>
+</nav>
