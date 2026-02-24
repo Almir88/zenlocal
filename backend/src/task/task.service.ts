@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { spawn } from 'child_process';
 import { simpleGit } from 'simple-git';
 import OpenAI from 'openai';
 import { PromptLogService } from '../auth/prompt-log.service';
@@ -225,7 +226,8 @@ CRITICAL RULES - you MUST follow these:
 3. INSERT IN PLACE: If the user says "add X inside Y" or "after Z", insert the new content at that exact location in the file. Do not append new content at the end of the file.
 4. NO DUPLICATION: Do not duplicate existing elements (e.g. do not add a second copy of a link or component). Add only the new item requested.
 5. SAME STYLE: Match the existing code style, indentation, and patterns in the file (e.g. if links use routerLink and a nav-icon span, the new link must use the same structure).
-6. FULL FILE: For each modified file, output the complete file content with your change applied in the correct place.`;
+6. FULL FILE: For each modified file, output the complete file content with your change applied in the correct place.
+7. TEST FILE: For every Angular component you create or modify (*.component.ts), also add a corresponding spec file: same path but with .component.spec.ts (e.g. app/login/login.component.ts → app/login/login.component.spec.ts). The spec file must: import ComponentFixture, TestBed from @angular/core/testing; import the component; use describe('ComponentName', () => { ... }); in beforeEach configure TestBed with imports: [ComponentUnderTest] and any needed providers (Router, services as mocks); include at least one test it('should create', () => { expect(component).toBeTruthy(); }); and add one or two tests for the main behavior the user asked for (e.g. if they asked for a login form, test that the form or submit exists). Output both the .component.ts and the .component.spec.ts in the "files" array.`;
     const user = `Project files (relative paths):\n${structure}\n\nUser request: ${prompt}`;
     let completion: Awaited<
       ReturnType<OpenAI['chat']['completions']['create']>
@@ -356,6 +358,174 @@ CRITICAL RULES - you MUST follow these:
     return data.html_url ?? null;
   }
 
+  async listBranches(
+    repoUrl?: string,
+  ): Promise<{ branches: string[]; defaultBranch?: string }> {
+    const fullRepoUrl = this.resolveRepoUrl(repoUrl ?? '');
+    const meta = this.parseRepoOwnerName(fullRepoUrl);
+    if (!meta) {
+      throw new BadRequestException(
+        'Could not parse repo from URL. Use a full GitHub URL.',
+      );
+    }
+    const token = this.config.get<string>('GITHUB_TOKEN');
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(
+      `https://api.github.com/repos/${meta.owner}/${meta.repo}/branches?per_page=100`,
+      { headers },
+    );
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new BadRequestException(
+        err?.message ?? `Failed to list branches (${res.status})`,
+      );
+    }
+    const data = (await res.json()) as Array<{ name: string }>;
+    const branches = data.map((b) => b.name);
+    const repoRes = token
+      ? await fetch(`https://api.github.com/repos/${meta.owner}/${meta.repo}`, {
+          headers,
+        })
+      : null;
+    let defaultBranch: string | undefined;
+    if (repoRes?.ok) {
+      const repoData = (await repoRes.json()) as { default_branch?: string };
+      defaultBranch = repoData.default_branch;
+    }
+    return { branches, defaultBranch };
+  }
+
+  private runNpmInstall(
+    projectRoot: string,
+    step: (msg: string) => void,
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      step('Installing dependencies…');
+      const proc = spawn('npm', ['install', '--no-audit', '--no-fund'], {
+        cwd: projectRoot,
+        shell: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const timeout = 120_000;
+      const t = setTimeout(() => {
+        proc.kill('SIGTERM');
+        step('npm install timed out after 2min; skipping tests.');
+        resolve(false);
+      }, timeout);
+      proc.on('close', (code) => {
+        clearTimeout(t);
+        if (code === 0) {
+          resolve(true);
+        } else {
+          step('npm install failed; skipping tests.');
+          resolve(false);
+        }
+      });
+      proc.on('error', () => {
+        clearTimeout(t);
+        step('Could not run npm install; skipping tests.');
+        resolve(false);
+      });
+    });
+  }
+
+  private runTestsInProject(
+    projectRoot: string,
+    step: (msg: string) => void,
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      const runTest = () => {
+        step('Running tests…');
+        const proc = spawn('npm', ['run', 'test'], {
+          cwd: projectRoot,
+          shell: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        const timeout = 90_000;
+        const t = setTimeout(() => {
+          proc.kill('SIGTERM');
+          step('Tests timed out after 90s.');
+          resolve();
+        }, timeout);
+        let out = '';
+        let err = '';
+        proc.stdout?.on('data', (c) => {
+          out += c.toString();
+        });
+        proc.stderr?.on('data', (c) => {
+          err += c.toString();
+        });
+        proc.on('close', (code) => {
+          clearTimeout(t);
+          if (code === 0) {
+            step('Tests passed.');
+          } else {
+            const combined = (err || out).slice(-800).trim();
+            const isConfigOrNoSpecs =
+              /No inputs were found|TS18003|tsconfig\.spec|no spec files/i.test(
+                combined,
+              ) || code === 127;
+            if (isConfigOrNoSpecs) {
+              step(
+                'Tests skipped (no spec files or invalid test config in this project).',
+              );
+            } else {
+              const snippet = combined.slice(-400);
+              step(
+                `Tests failed (exit ${code}). ${snippet ? `Output: ${snippet}` : ''}`,
+              );
+            }
+          }
+          resolve();
+        });
+        proc.on('error', () => {
+          clearTimeout(t);
+          step('Could not run tests (npm not found or no test script).');
+          resolve();
+        });
+      };
+
+      fs.access(path.join(projectRoot, 'node_modules'))
+        .then(() => runTest())
+        .catch(() => {
+          this.runNpmInstall(projectRoot, step).then((ok) => {
+            if (ok) runTest();
+            else resolve();
+          });
+        });
+    });
+  }
+
+  private async verifyImplementationWithAI(
+    prompt: string,
+    editedPaths: string[],
+    aiProvider?: AiProvider,
+    onStep?: (msg: string) => void,
+  ): Promise<void> {
+    const resolved = this.getClientForProvider(
+      aiProvider as AiProvider | undefined,
+    );
+    if (!resolved) return;
+    const { client, model, provider } = resolved;
+    const text = `User request: "${prompt.slice(0, 300)}". Files changed: ${editedPaths.join(', ') || 'none'}. Does this implementation fully satisfy the request? Reply in one short sentence (yes/no and why).`;
+    try {
+      const completion = await client.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: text }],
+        max_tokens: 150,
+      });
+      if (completion.usage)
+        await this.consumption.record(provider, model, completion.usage);
+      const reply = completion.choices[0]?.message?.content?.trim();
+      if (reply) onStep?.(`Verification: ${reply}`);
+    } catch {
+      onStep?.('Verification skipped (AI error).');
+    }
+  }
+
   /** Optional callback to stream step-by-step messages to the client */
   async runTask(
     dto: CreateTaskDto,
@@ -405,19 +575,36 @@ CRITICAL RULES - you MUST follow these:
     const cloneUrl = this.repoUrlWithToken(fullRepoUrl);
 
     step('Cloning repository…');
+    let branchExistedOnRemote = true;
     if (continueOnBranch) {
-      await git.clone(cloneUrl, workspacePath, [
-        '--depth',
-        '1',
-        '--branch',
-        branchName,
-      ]);
+      try {
+        await git.clone(cloneUrl, workspacePath, [
+          '--depth',
+          '1',
+          '--branch',
+          branchName,
+        ]);
+      } catch (err: unknown) {
+        const msg = (err as Error)?.message ?? '';
+        if (/branch .* not found|Remote branch .* not found/i.test(msg)) {
+          branchExistedOnRemote = false;
+          step(
+            `Branch "${branchName}" not on remote yet; creating it from default branch.`,
+          );
+          await git.clone(cloneUrl, workspacePath, ['--depth', '1']);
+        } else {
+          await fs
+            .rm(workspacePath, { recursive: true, force: true })
+            .catch(() => {});
+          throw err;
+        }
+      }
     } else {
       await git.clone(cloneUrl, workspacePath, ['--depth', '1']);
     }
     const repo = simpleGit(workspacePath);
     await repo.remote(['set-url', 'origin', cloneUrl]);
-    if (!continueOnBranch) {
+    if (!continueOnBranch || !branchExistedOnRemote) {
       await repo.checkoutLocalBranch(branchName);
     }
 
@@ -457,21 +644,58 @@ CRITICAL RULES - you MUST follow these:
       await repo.add('.');
       await repo.commit(`Applied: ${dto.prompt.slice(0, 80)}`);
       step('Commit created.');
+      if (dto.run_tests) {
+        await this.runTestsInProject(projectRoot, step);
+      }
+      if (dto.run_verification) {
+        await this.verifyImplementationWithAI(
+          dto.prompt,
+          edits.map((e) => e.path),
+          dto.ai_provider as AiProvider | undefined,
+          step,
+        );
+      }
     } else {
       step('AI suggested no changes.');
     }
 
-    if (continueOnBranch) {
+    if (continueOnBranch && branchExistedOnRemote) {
       step('Pulling latest from origin…');
       try {
         await repo.pull('origin', branchName, ['--rebase']);
       } catch {
-        // No upstream or already up to date; push will set upstream or succeed
+        try {
+          await repo.pull('origin', branchName);
+        } catch {
+          // Proceed to push; if remote is ahead, push will fail with clear error
+        }
       }
     }
 
     step('Pushing to origin…');
-    await repo.push('origin', branchName, ['-u']);
+    try {
+      await repo.push('origin', branchName, ['-u']);
+    } catch (pushErr: unknown) {
+      const msg = (pushErr as Error)?.message ?? '';
+      if (/rejected|fetch first|Updates were rejected/i.test(msg)) {
+        step('Push rejected (remote has new commits). Pulling and retrying…');
+        try {
+          await repo.pull('origin', branchName, ['--rebase']);
+          await repo.push('origin', branchName, ['-u']);
+        } catch (retryErr: unknown) {
+          await fs
+            .rm(workspacePath, { recursive: true, force: true })
+            .catch(() => {});
+          throw new BadRequestException(
+            'Push failed: remote has new commits. Pull the branch locally (git pull --rebase origin ' +
+              branchName +
+              '), push, then run again.',
+          );
+        }
+      } else {
+        throw pushErr;
+      }
+    }
     await this.promptLogs.setBranchCreatedAt(logId);
 
     step('Creating pull request…');

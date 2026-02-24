@@ -68,4 +68,18 @@ export class CreateTaskDto {
   @IsIn(['backend', 'frontend'])
   @IsOptional()
   project?: 'backend' | 'frontend';
+
+  @ApiPropertyOptional({
+    description:
+      'When true, run npm test in the project after applying changes.',
+  })
+  @IsOptional()
+  run_tests?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, ask AI to verify that the implementation matches the user request.',
+  })
+  @IsOptional()
+  run_verification?: boolean;
 }

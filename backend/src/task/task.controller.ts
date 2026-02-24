@@ -1,4 +1,13 @@
-import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -33,6 +42,18 @@ export class TaskController {
     @Req() req: { user: { sub: string } },
   ) {
     return this.taskService.runTask(dto, req.user.sub);
+  }
+
+  @Get('branches')
+  @ApiOperation({ summary: 'List branches from the repo (GitHub API)' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of branch names and default branch',
+  })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async listBranches(@Query('repo_url') repoUrl?: string) {
+    return this.taskService.listBranches(repoUrl);
   }
 
   @Post('chat')
