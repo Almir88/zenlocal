@@ -25,6 +25,13 @@ export class PromptComponent {
   readonly aiProviders = [
     { value: 'groq', label: 'Groq' },
     { value: 'openai', label: 'OpenAI' },
+    { value: 'sudodog', label: 'SudoDog' },
+    { value: 'langchain', label: 'LangChain' },
+    { value: 'crewai', label: 'CrewAI' },
+    { value: 'autogen', label: 'AutoGen' },
+    { value: 'autogpt', label: 'AutoGPT' },
+    { value: 'botpress', label: 'Botpress' },
+    { value: 'rasa', label: 'Rasa' },
   ] as const;
 
   readonly projects = [
@@ -40,7 +47,18 @@ export class PromptComponent {
     this.form = this.fb.nonNullable.group({
       prompt: ['', [Validators.required]],
       branchName: [''],
-      aiProvider: ['groq' as 'groq' | 'openai'],
+      aiProvider: [
+        'groq' as
+          | 'groq'
+          | 'openai'
+          | 'sudodog'
+          | 'langchain'
+          | 'crewai'
+          | 'autogen'
+          | 'autogpt'
+          | 'botpress'
+          | 'rasa',
+      ],
       project: ['backend' as 'backend' | 'frontend'],
     });
   }

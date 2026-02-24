@@ -32,6 +32,15 @@ export const LAYOUT_ROUTES: Routes = [
         data: { title: 'Prompt logs' },
       },
       {
+        path: 'consumption',
+        loadComponent: () =>
+          import('../pages/consumption/consumption.component').then(
+            (m) => m.ConsumptionComponent,
+          ),
+        canActivate: [adminGuard],
+        data: { title: 'Consumption' },
+      },
+      {
         path: 'users',
         loadComponent: () =>
           import('../pages/users/users.component').then(
