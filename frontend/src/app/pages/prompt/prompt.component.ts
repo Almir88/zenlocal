@@ -3,6 +3,8 @@ import {
   ViewChild,
   ElementRef,
   ChangeDetectorRef,
+  OnInit,
+  OnDestroy,
 } from '@angular/core';
 import {
   ReactiveFormsModule,
@@ -10,6 +12,7 @@ import {
   FormGroup,
   Validators,
 } from '@angular/forms';
+import { Subject, takeUntil } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth.service';
 
@@ -24,6 +27,12 @@ export interface ConversationMessage {
   steps?: string[];
 }
 
+export interface RepoFileItem {
+  name: string;
+  type: 'dir' | 'file';
+  path: string;
+}
+
 @Component({
   selector: 'app-prompt',
   standalone: true,
@@ -31,7 +40,7 @@ export interface ConversationMessage {
   templateUrl: './prompt.component.html',
   styleUrl: './prompt.component.scss',
 })
-export class PromptComponent {
+export class PromptComponent implements OnInit, OnDestroy {
   form: FormGroup;
   loading = false;
   result: { branch?: string; pr_url?: string; message?: string } | null = null;
@@ -43,6 +52,11 @@ export class PromptComponent {
   branches: string[] = [];
   loadBranchesLoading = false;
   defaultBranch: string | null = null;
+  projectFiles: RepoFileItem[] = [];
+  projectFilesLoading = false;
+  appliedFiles: string[] = [];
+  private destroy$ = new Subject<void>();
+
   @ViewChild('agentLog') agentLogRef?: ElementRef<HTMLDivElement>;
   @ViewChild('conversationEnd') conversationEndRef?: ElementRef<HTMLDivElement>;
 
@@ -88,6 +102,53 @@ export class PromptComponent {
       runTests: [true],
       runVerification: [true],
     });
+  }
+
+  ngOnInit(): void {
+    this.loadProjectFiles();
+    this.form
+      .get('project')
+      ?.valueChanges?.pipe(takeUntil(this.destroy$))
+      ?.subscribe(() => this.loadProjectFiles());
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  loadProjectFiles(): void {
+    const project = this.form.get('project')?.value as 'backend' | 'frontend';
+    if (!project) {
+      this.projectFiles = [];
+      return;
+    }
+    this.projectFilesLoading = true;
+    this.projectFiles = [];
+    const token = this.auth.getToken();
+    const params = new URLSearchParams({ project });
+    fetch(`${environment.apiUrl}/task/repo-files?${params}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            (data as { message?: string }).message ??
+              'Failed to load project structure',
+          );
+        }
+        this.projectFiles = Array.isArray(data) ? data : [];
+        this.cdr.detectChanges();
+      })
+      .catch(() => {
+        this.projectFiles = [];
+        this.cdr.detectChanges();
+      })
+      .finally(() => {
+        this.projectFilesLoading = false;
+        this.cdr.detectChanges();
+      });
   }
 
   loadBranches(): void {
@@ -282,6 +343,7 @@ export class PromptComponent {
                 branch?: string;
                 pr_url?: string | null;
                 task_id?: string;
+                applied_files?: string[];
               };
               if (event.type === 'step' && event.message) {
                 this.agentMessages = [
@@ -310,6 +372,9 @@ export class PromptComponent {
                   pr_url: event.pr_url ?? undefined,
                   message: event.message,
                 };
+                this.appliedFiles = Array.isArray(event.applied_files)
+                  ? event.applied_files
+                  : [];
                 const next = [...this.conversation];
                 const last = next[assistantIndex];
                 if (last && last.role === 'assistant') {

@@ -194,4 +194,51 @@
       <div #conversationEnd></div>
     </div>
   </div>
+
+  <div class="prompt-bottom">
+    <div class="preview-card">
+      <h3 class="preview-title">Project structure</h3>
+      <p class="preview-desc">
+        Folders and files in the selected project ({{
+          form.get("project")?.value || "backend"
+        }}).
+      </p>
+      @if (projectFilesLoading) {
+        <p class="preview-loading">Loading…</p>
+      } @else if (projectFiles.length > 0) {
+        <ul class="repo-files-list">
+          @for (f of projectFiles; track f.path) {
+            <li class="repo-file-item" [class.dir]="f.type === 'dir'">
+              @if (f.type === "dir") {
+                <span class="file-icon" aria-hidden="true">📁</span>
+              } @else {
+                <span class="file-icon" aria-hidden="true">📄</span>
+              }
+              <span class="file-name">{{ f.name }}</span>
+              <span class="file-path">{{ f.path }}</span>
+            </li>
+          }
+        </ul>
+      } @else if (!projectFilesLoading) {
+        <p class="preview-empty">
+          Select a project to see its structure, or repo not available.
+        </p>
+      }
+    </div>
+    <div class="preview-card">
+      <h3 class="preview-title">Applied changes (before PR)</h3>
+      <p class="preview-desc">Files modified by the last Implement run.</p>
+      @if (appliedFiles.length > 0) {
+        <ul class="applied-files-list">
+          @for (path of appliedFiles; track path) {
+            <li class="applied-file-item">{{ path }}</li>
+          }
+        </ul>
+      } @else {
+        <p class="preview-empty">
+          No applied changes yet. Use Implement to see modified files here.
+        </p>
+      }
+    </div>
+  </div>
 </div>
