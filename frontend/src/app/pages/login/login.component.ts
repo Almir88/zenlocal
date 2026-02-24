@@ -1,45 +1,11 @@
 import { Component } from '@angular/core';
-import {
-  ReactiveFormsModule,
-  FormBuilder,
-  FormGroup,
-  Validators,
-} from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { AuthService } from '../../core/auth.service';
 
-@Component({
-  selector: 'app-login',
-  standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
-  templateUrl: './login.component.html',
-  styleUrl: './login.component.scss',
-})
+@Component(
+  {
+    selector: 'app-login',
+    template: 
+      `\n      <div>\n        <p>Name Test: <input type='text' formControlName='name'/></p>\n        \n      </div>\n      `
+  }
+)
 export class LoginComponent {
-  form: FormGroup;
-  error = '';
-  showPassword = false;
-
-  constructor(
-    private fb: FormBuilder,
-    private auth: AuthService,
-  ) {
-    this.form = this.fb.nonNullable.group({
-      email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]],
-    });
-  }
-
-  onSubmit() {
-    this.error = '';
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
-    const { email, password } = this.form.getRawValue();
-    this.auth.login(email, password).subscribe({
-      next: (res) => this.auth.setSession(res),
-      error: () => (this.error = 'Invalid email or password'),
-    });
-  }
-}
+  constructor() { }\n}
