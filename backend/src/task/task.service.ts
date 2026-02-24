@@ -106,10 +106,10 @@ export class TaskService {
     const { client, model, provider } = resolved;
     const projectContext = this.getProjectContextForChat(dto.project);
     const system =
-      'You are a helpful assistant. The user is working with a codebase and may ask questions or request implementations. Reply concisely in a friendly way. If they ask you to implement something, tell them to use the Implement button to apply changes to their branch.' +
+      'You are a helpful assistant for the Zenlocal app. For every user message: first consider the project context below (the user selected this project in the app), then answer in a way that is relevant to this project. Always use the context to give concrete, useful answers—e.g. sidebar items, routes, structure, how things work. Do not reply with "check the code" or "use Implement" when they want information; give the answer from the context. Only when they explicitly ask to change or implement code, suggest the Implement button.' +
       (projectContext
-        ? `\n\nCurrent project context (user selected this in the app):\n${projectContext}`
-        : '');
+        ? `\n\nProject context (always use this to analyze and answer):\n${projectContext}`
+        : '\n\nNo project selected. Remind them to select Frontend or Backend in the Project dropdown so you can answer in relation to their project.');
     try {
       const completion = await client.chat.completions.create({
         model,
@@ -136,9 +136,21 @@ export class TaskService {
   private getProjectContextForChat(project?: 'backend' | 'frontend'): string {
     if (!project) return '';
     if (project === 'frontend') {
-      return `Frontend: Angular SPA (Zenlocal). Sidebar nav: Prompt (/prompt), Logs (/prompt-logs, admin only), Consumption (/consumption, admin only), Users (/users, admin only; sub-routes: /users/add, /users/list). Main page is Prompt: chat with AI and "Implement" to apply changes on a branch. Layout: sidebar + header with user menu.`;
+      return [
+        'Frontend: Angular SPA (Zenlocal).',
+        'Sidebar items (in order):',
+        '- Prompt — route /prompt — visible to all logged-in users. Main page: chat with AI + Implement button to apply changes on a branch.',
+        '- Logs — route /prompt-logs — admin only. Prompt logs history.',
+        '- Consumption — route /consumption — admin only. AI usage/consumption.',
+        '- Users — route /users — admin only. Sub-routes: /users/add (add user), /users/list (user list).',
+        'Layout: sidebar (nav above) + main area + header with page title and user dropdown (logout).',
+      ].join('\n');
     }
-    return `Backend: NestJS API. Endpoints: POST /task (create branch, AI edits, push, PR), POST /task/stream (same + NDJSON steps), POST /task/chat (conversational reply, no git). Auth: JWT, roles admin/user. Modules: auth, task, consumption, prompt-logs.`;
+    return [
+      'Backend: NestJS API.',
+      'Endpoints: POST /task (create branch, AI edits, push, PR), POST /task/stream (same + NDJSON step messages), POST /task/chat (conversational reply, no git).',
+      'Auth: JWT, roles admin and user. Modules: auth, task, consumption, prompt-logs.',
+    ].join('\n');
   }
 
   private getWorkspacePath(taskId: string): string {
