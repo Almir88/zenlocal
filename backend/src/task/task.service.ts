@@ -105,7 +105,15 @@ export class TaskService {
     const structure = await this.listProjectContext(workspacePath);
     const system = `You are a code generator. Given a project file list and a user request, output a JSON object with a single key "files" that is an array of file changes.
 Each item in "files" must be: { "path": "relative/path/from/root", "content": "full file content as string" }.
-Only include files you create or modify. Use path relative to project root. Output only the JSON object, no markdown.`;
+Only include files you create or modify. Use path relative to project root. Output only the JSON object, no markdown.
+
+CRITICAL RULES - you MUST follow these:
+1. MINIMAL EDIT: Change only what the user asked for. Do not add unrelated code, examples, or "improvements".
+2. PRESERVE STRUCTURE: When editing an existing file, keep the entire file and insert or change only at the exact place the user specified. Do not move or duplicate existing blocks to the end of the file.
+3. INSERT IN PLACE: If the user says "add X inside Y" or "after Z", insert the new content at that exact location in the file. Do not append new content at the end of the file.
+4. NO DUPLICATION: Do not duplicate existing elements (e.g. do not add a second copy of a link or component). Add only the new item requested.
+5. SAME STYLE: Match the existing code style, indentation, and patterns in the file (e.g. if links use routerLink and a nav-icon span, the new link must use the same structure).
+6. FULL FILE: For each modified file, output the complete file content with your change applied in the correct place.`;
     const user = `Project files (relative paths):\n${structure}\n\nUser request: ${prompt}`;
     let completion: Awaited<ReturnType<OpenAI['chat']['completions']['create']>>;
     try {
