@@ -1,15 +1,176 @@
-<h2 class="section-title">Prompt</h2>
-<p class="app-desc">
-  Chat with the AI or ask it to implement changes. Use <strong>Send</strong> to
-  talk; use <strong>Implement</strong> to apply changes on a branch (new or
-  continue on same branch). Set API keys in .env for Groq/OpenAI.
-</p>
-<div class="card prompt-card">
-  @if (conversation.length > 0) {
+<div class="prompt-page">
+  <div class="prompt-left">
+    <h2 class="section-title">Prompt</h2>
+    <p class="app-desc">
+      Chat with the AI or ask it to implement changes. Use
+      <strong>Send</strong> to talk; use <strong>Implement</strong> to apply
+      changes on a branch (new or continue on same branch). Set API keys in .env
+      for Groq/OpenAI.
+    </p>
+    <div class="card prompt-card">
+      <form [formGroup]="form" class="prompt-form">
+        <div class="form-row select-row">
+          <div class="form-group">
+            <label class="ai-label">Project</label>
+            <select
+              formControlName="project"
+              class="ai-select"
+              [disabled]="loading"
+            >
+              @for (opt of projects; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="ai-label">AI provider</label>
+            <select
+              formControlName="aiProvider"
+              class="ai-select"
+              [disabled]="loading"
+            >
+              @for (opt of aiProviders; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+        <textarea
+          formControlName="prompt"
+          placeholder="Ask something or describe what to implement (e.g. Add login page)"
+          rows="3"
+          [disabled]="loading || loadingChat"
+          (input)="showPromptRequired = false"
+        ></textarea>
+        @if (showPromptRequired) {
+          <p class="field-error">Prompt is required</p>
+        }
+        <div class="branch-row">
+          <input
+            type="text"
+            formControlName="branchName"
+            [placeholder]="
+              form.get('continueOnBranch')?.value
+                ? 'Branch name (required)'
+                : 'Branch name (optional)'
+            "
+            [disabled]="loading"
+            class="branch-input"
+          />
+          <button
+            type="button"
+            class="btn-load-branches"
+            (click)="loadBranches()"
+            [disabled]="loading || loadBranchesLoading"
+          >
+            {{ loadBranchesLoading ? "Loading…" : "Load branches" }}
+          </button>
+          @if (branches.length > 0) {
+            <select
+              class="branch-select"
+              [disabled]="loading"
+              (change)="
+                form.patchValue({ branchName: $any($event.target).value })
+              "
+            >
+              <option value="">— Select branch —</option>
+              @for (b of branches; track b) {
+                <option
+                  [value]="b"
+                  [selected]="form.get('branchName')?.value === b"
+                >
+                  {{ b }}{{ defaultBranch === b ? " (default)" : "" }}
+                </option>
+              }
+            </select>
+          }
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              formControlName="continueOnBranch"
+              [disabled]="loading"
+            />
+            Continue on same branch
+          </label>
+        </div>
+        <div class="checkboxes-row">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              formControlName="runTests"
+              [disabled]="loading"
+            />
+            Run tests after implement
+          </label>
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              formControlName="runVerification"
+              [disabled]="loading"
+            />
+            Verify with AI (matches request?)
+          </label>
+        </div>
+        @if (agentMessages.length > 0) {
+          <div class="agent-log" #agentLog>
+            @for (msg of agentMessages; track $index) {
+              <p
+                class="agent-msg"
+                [class.agent-step]="msg.type === 'step'"
+                [class.agent-result]="msg.type === 'result'"
+                [class.agent-error]="msg.type === 'error'"
+              >
+                {{ msg.message }}
+              </p>
+            }
+          </div>
+        }
+        @if (error) {
+          <p class="error">{{ error }}</p>
+        }
+        @if (result) {
+          <div class="result">
+            <p>{{ result.message }}</p>
+            @if (result.pr_url) {
+              <a [href]="result.pr_url" target="_blank" rel="noopener"
+                >Open pull request</a
+              >
+            }
+          </div>
+        }
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-send"
+            (click)="sendChat()"
+            [disabled]="
+              !form.get('prompt')?.value?.trim() || loading || loadingChat
+            "
+          >
+            Send
+          </button>
+          <button
+            type="button"
+            class="btn-implement"
+            (click)="runImplement()"
+            [disabled]="form.invalid || loading || loadingChat"
+          >
+            {{ loading ? "Implementing…" : "Implement" }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="prompt-right">
+    <h2 class="section-title">Chat</h2>
     <div class="conversation" #conversationContainer>
       @for (msg of conversation; track $index) {
-        <div class="conversation-msg" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
-          @if (msg.role === 'user') {
+        <div
+          class="conversation-msg"
+          [class.user]="msg.role === 'user'"
+          [class.assistant]="msg.role === 'assistant'"
+        >
+          @if (msg.role === "user") {
             <p class="msg-content">{{ msg.content }}</p>
           } @else {
             @if (msg.steps && msg.steps.length > 0) {
@@ -32,108 +193,5 @@
       }
       <div #conversationEnd></div>
     </div>
-  }
-  <form [formGroup]="form" class="prompt-form">
-    <div class="form-row select-row">
-      <div class="form-group">
-        <label class="ai-label">Project</label>
-        <select
-          formControlName="project"
-          class="ai-select"
-          [disabled]="loading"
-        >
-          @for (opt of projects; track opt.value) {
-            <option [value]="opt.value">{{ opt.label }}</option>
-          }
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="ai-label">AI provider</label>
-        <select
-          formControlName="aiProvider"
-          class="ai-select"
-          [disabled]="loading"
-        >
-          @for (opt of aiProviders; track opt.value) {
-            <option [value]="opt.value">{{ opt.label }}</option>
-          }
-        </select>
-      </div>
-    </div>
-    <textarea
-      formControlName="prompt"
-      placeholder="Ask something or describe what to implement (e.g. Add login page)"
-      rows="3"
-      [disabled]="loading || loadingChat"
-    ></textarea>
-    @if (form.get("prompt")?.invalid && form.get("prompt")?.touched) {
-      <p class="field-error">Prompt is required</p>
-    }
-    <div class="branch-row">
-      <input
-        type="text"
-        formControlName="branchName"
-        [placeholder]="
-          form.get('continueOnBranch')?.value
-            ? 'Branch name (required)'
-            : 'Branch name (optional)'
-        "
-        [disabled]="loading"
-        class="branch-input"
-      />
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          formControlName="continueOnBranch"
-          [disabled]="loading"
-        />
-        Continue on same branch
-      </label>
-    </div>
-    @if (agentMessages.length > 0) {
-      <div class="agent-log" #agentLog>
-        @for (msg of agentMessages; track $index) {
-          <p
-            class="agent-msg"
-            [class.agent-step]="msg.type === 'step'"
-            [class.agent-result]="msg.type === 'result'"
-            [class.agent-error]="msg.type === 'error'"
-          >
-            {{ msg.message }}
-          </p>
-        }
-      </div>
-    }
-    @if (error) {
-      <p class="error">{{ error }}</p>
-    }
-    @if (result) {
-      <div class="result">
-        <p>{{ result.message }}</p>
-        @if (result.pr_url) {
-          <a [href]="result.pr_url" target="_blank" rel="noopener"
-            >Open pull request</a
-          >
-        }
-      </div>
-    }
-    <div class="form-actions">
-      <button
-        type="button"
-        class="btn-send"
-        (click)="sendChat()"
-        [disabled]="!form.get('prompt')?.value?.trim() || loading || loadingChat"
-      >
-        Send
-      </button>
-      <button
-        type="button"
-        class="btn-implement"
-        (click)="runImplement()"
-        [disabled]="form.invalid || loading || loadingChat"
-      >
-        {{ loading ? "Implementing…" : "Implement" }}
-      </button>
-    </div>
-  </form>
+  </div>
 </div>

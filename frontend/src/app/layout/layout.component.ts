@@ -6,6 +6,7 @@ import {
   RouterOutlet,
 } from '@angular/router';
 import { AuthService } from '../core/auth.service';
+import { ThemeService } from '../core/theme.service';
 
 @Component({
   selector: 'app-layout',
@@ -20,6 +21,7 @@ export class LayoutComponent {
   constructor(
     public auth: AuthService,
     public router: Router,
+    public theme: ThemeService,
   ) {}
 
   toggleUserMenu() {

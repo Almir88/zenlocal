@@ -36,9 +36,13 @@ export class PromptComponent {
   loading = false;
   result: { branch?: string; pr_url?: string; message?: string } | null = null;
   error = '';
+  showPromptRequired = false;
   agentMessages: AgentMessage[] = [];
   conversation: ConversationMessage[] = [];
   loadingChat = false;
+  branches: string[] = [];
+  loadBranchesLoading = false;
+  defaultBranch: string | null = null;
   @ViewChild('agentLog') agentLogRef?: ElementRef<HTMLDivElement>;
   @ViewChild('conversationEnd') conversationEndRef?: ElementRef<HTMLDivElement>;
 
@@ -81,7 +85,40 @@ export class PromptComponent {
           | 'rasa',
       ],
       project: ['backend' as 'backend' | 'frontend'],
+      runTests: [true],
+      runVerification: [true],
     });
+  }
+
+  loadBranches(): void {
+    this.loadBranchesLoading = true;
+    const token = this.auth.getToken();
+    fetch(`${environment.apiUrl}/task/branches`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok)
+          throw new Error(
+            (data as { message?: string }).message ?? 'Failed to load branches',
+          );
+        const { branches, defaultBranch } = data as {
+          branches: string[];
+          defaultBranch?: string;
+        };
+        this.branches = Array.isArray(branches) ? branches : [];
+        this.defaultBranch = defaultBranch ?? null;
+        this.cdr.detectChanges();
+      })
+      .catch(() => {
+        this.branches = [];
+        this.defaultBranch = null;
+        this.cdr.detectChanges();
+      })
+      .finally(() => {
+        this.loadBranchesLoading = false;
+        this.cdr.detectChanges();
+      });
   }
 
   /** Handles form submit (e.g. Enter); sends chat message. */
@@ -92,9 +129,10 @@ export class PromptComponent {
   sendChat(): void {
     const prompt = this.form.get('prompt')?.value?.trim();
     if (!prompt) {
-      this.form.get('prompt')?.markAsTouched();
+      this.showPromptRequired = true;
       return;
     }
+    this.showPromptRequired = false;
     this.error = '';
     this.conversation = [
       ...this.conversation,
@@ -156,8 +194,15 @@ export class PromptComponent {
       this.form.markAllAsTouched();
       return;
     }
-    const { prompt, branchName, continueOnBranch, aiProvider, project } =
-      this.form.getRawValue();
+    const {
+      prompt,
+      branchName,
+      continueOnBranch,
+      aiProvider,
+      project,
+      runTests,
+      runVerification,
+    } = this.form.getRawValue();
     if (continueOnBranch && !branchName?.trim()) {
       this.error =
         'Branch name is required when continuing on the same branch.';
@@ -177,6 +222,8 @@ export class PromptComponent {
       continue_on_branch?: boolean;
       ai_provider?: string;
       project?: string;
+      run_tests?: boolean;
+      run_verification?: boolean;
     } = {
       prompt: prompt.trim(),
       ai_provider: aiProvider,
@@ -184,6 +231,8 @@ export class PromptComponent {
     };
     if (branchName?.trim()) body.branch_name = branchName.trim();
     if (continueOnBranch) body.continue_on_branch = true;
+    if (runTests) body.run_tests = true;
+    if (runVerification) body.run_verification = true;
 
     const token = this.auth.getToken();
     this.form.disable();
@@ -280,17 +329,13 @@ export class PromptComponent {
                 setTimeout(() => this.scrollLogToBottom(), 0);
                 this.scrollConversationToEnd();
               } else if (event.type === 'error') {
-                this.agentMessages = [
-                  ...this.agentMessages,
-                  { type: 'error', message: event.message },
-                ];
-                this.error = event.message ?? 'Request failed';
+                const errMsg = event.message ?? 'Request failed';
                 const next = [...this.conversation];
                 const last = next[assistantIndex];
                 if (last && last.role === 'assistant') {
                   next[assistantIndex] = {
                     ...last,
-                    content: `Error: ${this.error}`,
+                    content: errMsg,
                   };
                   this.conversation = next;
                 }

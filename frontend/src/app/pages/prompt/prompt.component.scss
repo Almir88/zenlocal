@@ -1,3 +1,23 @@
+.prompt-page {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.prompt-left {
+  flex: 0 1 480px;
+  min-width: 0;
+}
+
+.prompt-right {
+  flex: 1 1 360px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
 .section-title {
   margin: 0 0 0.5rem;
   font-size: 1.25rem;
@@ -18,9 +38,9 @@
 }
 
 .conversation {
-  max-height: 320px;
+  min-height: 420px;
+  max-height: 70vh;
   overflow-y: auto;
-  margin-bottom: 1rem;
   padding: 0.75rem;
   background: #fafafa;
   border-radius: 8px;
@@ -196,6 +216,46 @@
   min-width: 0;
 }
 
+.btn-load-branches {
+  align-self: flex-start;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  color: #1565c0;
+  background: #e3f2fd;
+  border: 1px solid #1565c0;
+  border-radius: 6px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #bbdefb;
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+}
+
+.branch-select {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  min-width: 200px;
+
+  &:focus {
+    outline: none;
+    border-color: #1565c0;
+  }
+}
+
+.checkboxes-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;
@@ -286,5 +346,122 @@
 
   strong {
     color: #212121;
+  }
+}
+
+// Dark mode
+:host-context([data-theme="dark"]) {
+  .section-title {
+    color: #e8eaed;
+  }
+
+  .app-desc,
+  .card-desc {
+    color: #9aa0a6;
+  }
+
+  .conversation {
+    background: #202124;
+    border-color: #3c4043;
+  }
+
+  .conversation-msg.assistant .msg-content,
+  .conversation-msg.assistant .msg-steps {
+    background: #292a2d;
+    color: #e8eaed;
+  }
+
+  .conversation-msg.assistant .msg-step {
+    color: #8ab4f8;
+  }
+
+  .conversation-msg.assistant .msg-loading {
+    color: #9aa0a6;
+  }
+
+  .ai-label {
+    color: #9aa0a6;
+  }
+
+  .ai-select,
+  .prompt-form textarea,
+  .prompt-form input,
+  .branch-input,
+  .branch-select {
+    background: #292a2d;
+    border-color: #3c4043;
+    color: #e8eaed;
+
+    &:focus {
+      border-color: #8ab4f8;
+    }
+  }
+
+  .btn-load-branches {
+    color: #8ab4f8;
+    background: #292a2d;
+    border-color: #8ab4f8;
+
+    &:hover:not(:disabled) {
+      background: #3c4043;
+    }
+  }
+
+  .checkbox-label {
+    color: #9aa0a6;
+  }
+
+  .agent-log {
+    background: #202124;
+  }
+
+  .agent-msg.agent-step {
+    color: #8ab4f8;
+  }
+
+  .agent-msg.agent-result {
+    color: #81c995;
+  }
+
+  .result {
+    background: #1e3a2a;
+
+    a {
+      color: #8ab4f8;
+    }
+  }
+
+  .btn-send {
+    background: #292a2d;
+    color: #8ab4f8;
+
+    &:hover:not(:disabled) {
+      background: #3c4043;
+    }
+  }
+
+  .btn-implement {
+    background: #8ab4f8;
+    color: #202124;
+
+    &:hover:not(:disabled) {
+      background: #aecbfa;
+    }
+  }
+
+  .frameworks-section {
+    border-top-color: #3c4043;
+  }
+
+  .frameworks-title {
+    color: #e8eaed;
+  }
+
+  .frameworks-list {
+    color: #9aa0a6;
+
+    strong {
+      color: #e8eaed;
+    }
   }
 }

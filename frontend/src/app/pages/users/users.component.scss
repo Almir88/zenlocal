@@ -17,7 +17,9 @@
   text-decoration: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 
   &:hover {
     color: #1565c0;
@@ -31,4 +33,24 @@
 
 .tab-content {
   min-height: 200px;
+}
+
+// Dark mode
+:host-context([data-theme="dark"]) {
+  .tabs {
+    border-bottom-color: #3c4043;
+  }
+
+  .tab {
+    color: #9aa0a6;
+
+    &:hover {
+      color: #8ab4f8;
+    }
+
+    &.active {
+      color: #8ab4f8;
+      border-bottom-color: #8ab4f8;
+    }
+  }
 }

@@ -93,57 +93,83 @@
   <div class="main">
     <header class="header">
       <h1 class="page-title">{{ pageTitle }}</h1>
-      <div class="user-profile-wrap">
+      <div class="header-actions">
         <button
           type="button"
-          class="user-profile-pill"
-          (click)="toggleUserMenu()"
-          [attr.aria-expanded]="userMenuOpen"
-          aria-haspopup="true"
+          class="theme-toggle"
+          (click)="theme.toggle()"
+          [attr.aria-label]="
+            theme.isDark() ? 'Switch to light mode' : 'Switch to dark mode'
+          "
+          title="{{ theme.isDark() ? 'Light mode' : 'Dark mode' }}"
         >
-          <span class="user-avatar" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
+          <span class="theme-toggle-track">
+            <span
+              class="theme-toggle-thumb"
+              [class.dark]="theme.isDark()"
+            ></span>
           </span>
-          <span class="user-greeting">
-            <span class="welcome-line">Welcome back ✋</span>
-            <span class="user-name">{{
-              auth.currentUser()?.name ?? "User"
-            }}</span>
-          </span>
-          <span class="user-chevron" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+          <span class="theme-toggle-labels">
+            <span class="theme-label light" [class.active]="!theme.isDark()"
+              >Light</span
             >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            <span class="theme-label dark" [class.active]="theme.isDark()"
+              >Dark</span
+            >
           </span>
         </button>
-        @if (userMenuOpen) {
-          <div class="user-dropdown-menu">
-            <button
-              type="button"
-              class="user-dropdown-item"
-              (click)="auth.logout(); closeUserMenu()"
-            >
-              Logout
-            </button>
-          </div>
-        }
+        <div class="user-profile-wrap">
+          <button
+            type="button"
+            class="user-profile-pill"
+            (click)="toggleUserMenu()"
+            [attr.aria-expanded]="userMenuOpen"
+            aria-haspopup="true"
+          >
+            <span class="user-avatar" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <span class="user-greeting">
+              <span class="welcome-line">Welcome back ✋</span>
+              <span class="user-name">{{
+                auth.currentUser()?.name ?? "User"
+              }}</span>
+            </span>
+            <span class="user-chevron" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </button>
+          @if (userMenuOpen) {
+            <div class="user-dropdown-menu">
+              <button
+                type="button"
+                class="user-dropdown-item"
+                (click)="auth.logout(); closeUserMenu()"
+              >
+                Logout
+              </button>
+            </div>
+          }
+        </div>
       </div>
     </header>
     <main class="content">

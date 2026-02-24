@@ -16,9 +16,18 @@ body {
   background: #fafafa;
 }
 
+[data-theme="dark"] body {
+  color: #e8eaed;
+  background: #171717;
+}
+
 a {
   color: #1565c0;
   text-decoration: none;
+}
+
+[data-theme="dark"] a {
+  color: #8ab4f8;
 }
 
 button {
