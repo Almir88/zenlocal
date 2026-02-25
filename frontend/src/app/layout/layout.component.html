@@ -92,7 +92,21 @@
   </aside>
   <div class="main">
     <header class="header">
-      <h1 class="page-title">{{ pageTitle }}</h1>
+      <div class="header-titles">
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+          @for (item of breadcrumbs; track $index) {
+            @if (item.path) {
+              <a [routerLink]="item.path" class="breadcrumb-link">{{
+                item.label
+              }}</a>
+              <span class="breadcrumb-sep" aria-hidden="true">/</span>
+            } @else {
+              <span class="breadcrumb-current">{{ item.label }}</span>
+            }
+          }
+        </nav>
+        <h1 class="page-title">{{ pageTitle }}</h1>
+      </div>
       <div class="header-actions">
         <button
           type="button"
@@ -160,6 +174,13 @@
           </button>
           @if (userMenuOpen) {
             <div class="user-dropdown-menu">
+              <a
+                routerLink="/profile"
+                class="user-dropdown-item"
+                (click)="closeUserMenu()"
+              >
+                Profile
+              </a>
               <button
                 type="button"
                 class="user-dropdown-item"

@@ -1,6 +1,24 @@
 <h2 class="section-title">All users</h2>
 <p class="section-desc">Overview of all registered users.</p>
 
+<div class="toolbar">
+  <div class="filters">
+    <input
+      type="text"
+      [(ngModel)]="search"
+      (keyup.enter)="onSearch()"
+      placeholder="Search by name or email..."
+      class="filter-input"
+    />
+    <button type="button" class="btn btn-secondary" (click)="onSearch()">
+      Search
+    </button>
+  </div>
+  <button type="button" class="btn btn-primary" (click)="exportCsv()">
+    Export CSV
+  </button>
+</div>
+
 @if (loading) {
   <p class="muted">Loading…</p>
 } @else if (error) {
@@ -38,6 +56,28 @@
     </div>
     @if (users.length === 0) {
       <p class="muted">No users yet.</p>
+    } @else {
+      <div class="pagination">
+        <button
+          type="button"
+          class="btn btn-sm"
+          [disabled]="page <= 1"
+          (click)="goToPage(page - 1)"
+        >
+          Previous
+        </button>
+        <span class="pagination-info">
+          Page {{ page }} of {{ totalPages }} ({{ total }} total)
+        </span>
+        <button
+          type="button"
+          class="btn btn-sm"
+          [disabled]="page >= totalPages"
+          (click)="goToPage(page + 1)"
+        >
+          Next
+        </button>
+      </div>
     }
   </div>
 }

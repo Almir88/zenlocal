@@ -15,6 +15,7 @@ import {
 import { Subject, takeUntil } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth.service';
+import { ToastrService } from 'ngx-toastr';
 import type {
   AgentMessage,
   AppliedFileDiff,
@@ -52,6 +53,12 @@ export class PromptComponent implements OnInit, OnDestroy {
   defaultBranch: string | null = null;
   projectFiles: RepoFileItem[] = [];
   projectFilesLoading: boolean = false;
+  /** Paths of folders that are expanded. */
+  expandedPaths = new Set<string>();
+  /** Loaded children per folder path (path -> list of items). */
+  loadedChildren: Record<string, RepoFileItem[]> = {};
+  /** Paths currently loading children (to show spinner on expand). */
+  loadingPaths = new Set<string>();
   appliedFiles: string[] = [];
   appliedDiffs: AppliedFileDiff[] = [];
   implementBranch: string | null = null;
@@ -85,6 +92,7 @@ export class PromptComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     public auth: AuthService,
     private cdr: ChangeDetectorRef,
+    private toastr: ToastrService,
   ) {
     this.form = this.fb.nonNullable.group({
       prompt: ['', [Validators.required]],
@@ -123,10 +131,15 @@ export class PromptComponent implements OnInit, OnDestroy {
     const project = this.form.get('project')?.value as 'backend' | 'frontend';
     if (!project) {
       this.projectFiles = [];
+      this.expandedPaths.clear();
+      this.loadedChildren = {};
       return;
     }
     this.projectFilesLoading = true;
     this.projectFiles = [];
+    this.expandedPaths.clear();
+    this.loadedChildren = {};
+    this.loadingPaths.clear();
     const token = this.auth.getToken();
     const params = new URLSearchParams({ project });
     fetch(`${environment.apiUrl}/task/repo-files?${params}`, {
@@ -149,6 +162,79 @@ export class PromptComponent implements OnInit, OnDestroy {
       })
       .finally(() => {
         this.projectFilesLoading = false;
+        this.cdr.detectChanges();
+      });
+  }
+
+  /** Flatten tree for display: items with depth for indent. */
+  getDisplayList(): { item: RepoFileItem; depth: number }[] {
+    const out: { item: RepoFileItem; depth: number }[] = [];
+    const walk = (items: RepoFileItem[], depth: number) => {
+      for (const f of items) {
+        out.push({ item: f, depth });
+        if (
+          f.type === 'dir' &&
+          this.expandedPaths.has(f.path) &&
+          this.loadedChildren[f.path]?.length
+        ) {
+          walk(this.loadedChildren[f.path], depth + 1);
+        }
+      }
+    };
+    walk(this.projectFiles, 0);
+    return out;
+  }
+
+  isExpanded(path: string): boolean {
+    return this.expandedPaths.has(path);
+  }
+
+  isLoading(path: string): boolean {
+    return this.loadingPaths.has(path);
+  }
+
+  getChildren(path: string): RepoFileItem[] {
+    return this.loadedChildren[path] ?? [];
+  }
+
+  toggleFolder(path: string): void {
+    if (this.expandedPaths.has(path)) {
+      this.expandedPaths.delete(path);
+    } else {
+      this.expandedPaths.add(path);
+      if (!this.loadedChildren[path]?.length && !this.loadingPaths.has(path)) {
+        this.loadFolderChildren(path);
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  private loadFolderChildren(path: string): void {
+    this.loadingPaths.add(path);
+    this.cdr.detectChanges();
+    const project = this.form.get('project')?.value as 'backend' | 'frontend';
+    const token = this.auth.getToken();
+    const params = new URLSearchParams({ project, path });
+    fetch(`${environment.apiUrl}/task/repo-files?${params}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            (data as { message?: string }).message ??
+              'Failed to load folder contents',
+          );
+        }
+        this.loadedChildren[path] = Array.isArray(data) ? data : [];
+        this.cdr.detectChanges();
+      })
+      .catch(() => {
+        this.loadedChildren[path] = [];
+        this.cdr.detectChanges();
+      })
+      .finally(() => {
+        this.loadingPaths.delete(path);
         this.cdr.detectChanges();
       });
   }
@@ -390,11 +476,17 @@ export class PromptComponent implements OnInit, OnDestroy {
                     continueOnBranch: true,
                   });
                 }
+                this.toastr.success(
+                  event.branch
+                    ? `Task completed. Branch: ${event.branch}`
+                    : 'Task completed',
+                );
                 this.cdr.detectChanges();
                 setTimeout(() => this.scrollLogToBottom(), 0);
                 this.scrollConversationToEnd();
               } else if (event.type === 'error') {
                 const errMsg = event.message ?? 'Request failed';
+                this.toastr.error(errMsg);
                 const next = [...this.conversation];
                 const last = next[assistantIndex];
                 if (last && last.role === 'assistant') {
@@ -419,6 +511,7 @@ export class PromptComponent implements OnInit, OnDestroy {
         this.loading = false;
         this.form.enable();
         this.error = err.message ?? 'Request failed';
+        this.toastr.error(this.error);
         const next = [...this.conversation];
         const last = next[assistantIndex];
         if (last && last.role === 'assistant') {
@@ -472,10 +565,16 @@ export class PromptComponent implements OnInit, OnDestroy {
           );
         }
         this.testsAndPrResult = data as TestsAndPrResult;
+        this.toastr.success(
+          (data as TestsAndPrResult).pr_url
+            ? 'PR created successfully'
+            : 'Tests and PR step completed',
+        );
         this.cdr.detectChanges();
       })
       .catch((err: Error) => {
         this.error = err.message;
+        this.toastr.error(err.message);
         this.cdr.detectChanges();
       })
       .finally(() => {

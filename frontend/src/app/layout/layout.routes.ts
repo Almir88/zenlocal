@@ -15,6 +15,14 @@ export const LAYOUT_ROUTES: Routes = [
         redirectTo: 'prompt',
       },
       {
+        path: 'profile',
+        loadComponent: () =>
+          import('../pages/profile/profile.component').then(
+            (m) => m.ProfileComponent,
+          ),
+        data: { title: 'Profile' },
+      },
+      {
         path: 'prompt',
         loadComponent: () =>
           import('../pages/prompt/prompt.component').then(

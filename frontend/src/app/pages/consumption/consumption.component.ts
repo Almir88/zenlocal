@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { downloadCsv } from '../../core/export-csv';
 import type { MonthlyUsage, MonthRow } from './models/consumption.models';
 
 @Component({
@@ -12,8 +13,8 @@ import type { MonthlyUsage, MonthRow } from './models/consumption.models';
 })
 export class ConsumptionComponent implements OnInit {
   rows: MonthRow[] = [];
-  loading: boolean = true;
-  error: string = '';
+  loading = true;
+  error = '';
 
   constructor(private http: HttpClient) {}
 
@@ -87,5 +88,20 @@ export class ConsumptionComponent implements OnInit {
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
     if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
     return String(n);
+  }
+
+  exportCsv(): void {
+    const headers = ['Month', 'Groq (tokens)', 'OpenAI (tokens)', 'Total'];
+    const rows = this.rows.map((r) => [
+      r.monthLabel,
+      r.groq.totalTokens,
+      r.openai.totalTokens,
+      r.totalTokens,
+    ]);
+    downloadCsv(
+      `consumption-${new Date().toISOString().slice(0, 10)}.csv`,
+      headers,
+      rows,
+    );
   }
 }

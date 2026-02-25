@@ -23,7 +23,7 @@
   margin: 0 0 0.5rem;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #212121;
+  color: var(--text-primary);
 }
 
 .app-desc {
@@ -31,7 +31,7 @@
   margin: 0 0 1.25rem;
   font-size: 0.9375rem;
   line-height: 1.5;
-  color: #5f6368;
+  color: var(--text-muted);
 }
 
 .prompt-card {
@@ -97,7 +97,7 @@
 
 .card-desc {
   margin: 0 0 1rem;
-  color: #616161;
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
@@ -396,10 +396,81 @@
   list-style: none;
 }
 
+.repo-files-tree {
+  padding-left: 0.25rem;
+}
+
 .repo-file-item,
 .applied-file-item {
   font-size: 0.875rem;
   padding: 0.2rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-left: calc(0.25rem + (var(--depth, 0) * 1rem));
+}
+
+.repo-file-item .expand-btn,
+.repo-file-item .expand-placeholder {
+  width: 1.25rem;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.repo-file-item .expand-btn {
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #5f6368;
+  font-size: 0.65rem;
+  line-height: 1;
+  border-radius: 2px;
+
+  &:hover {
+    color: #202124;
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+.repo-file-item .expand-icon {
+  display: inline-block;
+  transition: transform 0.15s ease;
+
+  &.expanded {
+    transform: rotate(90deg);
+  }
+}
+
+.repo-file-item .expand-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #1565c0;
+  border-radius: 50%;
+  animation: repo-tree-spin 0.6s linear infinite;
+}
+
+@keyframes repo-tree-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.repo-file-item .file-name {
+  flex-shrink: 0;
+}
+
+.repo-file-item .file-path {
+  margin-left: 0.25rem;
+  color: #5f6368;
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .applied-section {
@@ -501,15 +572,6 @@
 
 // Dark mode
 :host-context([data-theme="dark"]) {
-  .section-title {
-    color: #e8eaed;
-  }
-
-  .app-desc,
-  .card-desc {
-    color: #9aa0a6;
-  }
-
   .conversation {
     background: #202124;
     border-color: #3c4043;
@@ -541,6 +603,10 @@
     background: #292a2d;
     border-color: #3c4043;
     color: #e8eaed;
+
+    &::placeholder {
+      color: #9aa0a6;
+    }
 
     &:focus {
       border-color: #8ab4f8;

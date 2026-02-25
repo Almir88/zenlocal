@@ -44,13 +44,13 @@
     margin: 0 0 0.25rem;
     font-size: 1.5rem;
     font-weight: 700;
-    color: #212121;
+    color: var(--text-primary);
   }
 }
 
 .subtitle {
   margin: 0;
-  color: #757575;
+  color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 400;
 }
@@ -65,7 +65,7 @@
   display: block;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #424242;
+  color: var(--text-primary);
   margin-bottom: 0.25rem;
 }
 
@@ -164,6 +164,11 @@
   color: #c62828;
 }
 
+:host-context([data-theme="dark"]) .field-error,
+:host-context([data-theme="dark"]) .error {
+  color: #f28b82;
+}
+
 .page-footer {
   text-align: center;
   margin-top: auto;
@@ -171,7 +176,7 @@
 
 .footer-company {
   font-size: 0.9rem;
-  color: #424242;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -190,6 +195,57 @@
 }
 
 .sep {
-  color: #757575;
+  color: var(--text-muted);
   margin: 0 0.25rem;
+}
+
+:host-context([data-theme="dark"]) {
+  .login-card {
+    background: #202124;
+    color: var(--text-primary);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .back-link {
+    color: #8ab4f8;
+  }
+
+  .input-field {
+    background: #292a2d;
+    border-color: #3c4043;
+    color: #e8eaed;
+
+    &::placeholder {
+      color: #9aa0a6;
+    }
+
+    &:focus {
+      border-color: #8ab4f8;
+    }
+  }
+
+  .toggle-password {
+    color: var(--text-muted);
+
+    &:hover {
+      color: var(--text-primary);
+    }
+  }
+
+  .submit-btn {
+    background: #8ab4f8;
+    color: #202124;
+
+    &:hover:not(:disabled) {
+      background: #aecbfa;
+    }
+  }
+
+  .link {
+    color: #8ab4f8;
+  }
+
+  .footer-legal a {
+    color: #8ab4f8;
+  }
 }

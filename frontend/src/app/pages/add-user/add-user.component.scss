@@ -2,20 +2,27 @@
   margin: 0 0 1rem;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #212121;
+  color: var(--text-primary);
 }
 
 .add-user-card {
   max-width: 400px;
   background: #fff;
+  color: var(--text-primary);
   border-radius: 10px;
   padding: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+:host-context([data-theme="dark"]) .add-user-card {
+  background: #202124;
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
 .card-desc {
   margin: 0 0 1rem;
-  color: #616161;
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
@@ -73,18 +80,6 @@
 
 // Dark mode
 :host-context([data-theme="dark"]) {
-  .section-title {
-    color: #e8eaed;
-  }
-
-  .add-user-card {
-    background: #202124;
-  }
-
-  .card-desc {
-    color: #9aa0a6;
-  }
-
   .add-user-form input {
     background: #292a2d;
     border-color: #3c4043;

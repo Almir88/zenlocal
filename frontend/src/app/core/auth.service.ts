@@ -62,6 +62,12 @@ export class AuthService {
     this.router.navigate(['/']);
   }
 
+  /** Update current user in memory and storage (e.g. after profile edit). */
+  setUser(user: User): void {
+    localStorage.setItem(this.userKey, JSON.stringify(user));
+    this.user.set(user);
+  }
+
   logout(): void {
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.userKey);

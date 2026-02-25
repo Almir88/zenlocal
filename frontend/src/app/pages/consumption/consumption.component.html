@@ -4,6 +4,17 @@
   prompt run. Admin only.
 </p>
 
+<div class="toolbar">
+  <button
+    type="button"
+    class="btn btn-primary"
+    (click)="exportCsv()"
+    [disabled]="loading || rows.length === 0"
+  >
+    Export CSV
+  </button>
+</div>
+
 @if (loading) {
   <p class="muted">Loading…</p>
 } @else if (error) {
@@ -26,14 +37,19 @@
               <td class="month-cell">{{ row.monthLabel }}</td>
               <td class="num">{{ formatTokens(row.groq.totalTokens) }}</td>
               <td class="num">{{ formatTokens(row.openai.totalTokens) }}</td>
-              <td class="num total-cell">{{ formatTokens(row.totalTokens) }}</td>
+              <td class="num total-cell">
+                {{ formatTokens(row.totalTokens) }}
+              </td>
             </tr>
           }
         </tbody>
       </table>
     </div>
     @if (rows.length === 0) {
-      <p class="muted">No usage recorded yet. Run a prompt with Groq or OpenAI to see data here.</p>
+      <p class="muted">
+        No usage recorded yet. Run a prompt with Groq or OpenAI to see data
+        here.
+      </p>
     }
   </div>
 }

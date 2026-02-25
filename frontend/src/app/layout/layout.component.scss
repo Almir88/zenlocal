@@ -161,6 +161,39 @@
   }
 }
 
+.header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+.breadcrumb-link {
+  color: #5f6368;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.breadcrumb-sep {
+  color: #9aa0a6;
+  user-select: none;
+}
+
+.breadcrumb-current {
+  color: #202124;
+  font-weight: 500;
+}
+
 .page-title {
   font-size: 1.25rem;
   font-weight: 600;
@@ -317,6 +350,22 @@
   .header {
     background: #202124;
     border-bottom-color: #3c4043;
+  }
+
+  .breadcrumb-link {
+    color: #9aa0a6;
+
+    &:hover {
+      color: #8ab4f8;
+    }
+  }
+
+  .breadcrumb-sep {
+    color: #5f6368;
+  }
+
+  .breadcrumb-current {
+    color: #e8eaed;
   }
 
   .page-title {

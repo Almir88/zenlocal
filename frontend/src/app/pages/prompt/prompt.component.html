@@ -188,16 +188,43 @@
       @if (projectFilesLoading) {
         <p class="preview-loading">Loading…</p>
       } @else if (projectFiles.length > 0) {
-        <ul class="repo-files-list">
-          @for (f of projectFiles; track f.path) {
-            <li class="repo-file-item" [class.dir]="f.type === 'dir'">
-              @if (f.type === "dir") {
+        <ul class="repo-files-list repo-files-tree">
+          @for (row of getDisplayList(); track row.item.path) {
+            <li
+              class="repo-file-item"
+              [class.dir]="row.item.type === 'dir'"
+              [style.--depth]="row.depth"
+            >
+              @if (row.item.type === "dir") {
+                <button
+                  type="button"
+                  class="expand-btn"
+                  (click)="toggleFolder(row.item.path)"
+                  [attr.aria-expanded]="isExpanded(row.item.path)"
+                  [attr.aria-label]="
+                    isExpanded(row.item.path)
+                      ? 'Collapse folder'
+                      : 'Expand folder'
+                  "
+                >
+                  @if (isLoading(row.item.path)) {
+                    <span class="expand-spinner" aria-hidden="true"></span>
+                  } @else {
+                    <span
+                      class="expand-icon"
+                      [class.expanded]="isExpanded(row.item.path)"
+                      aria-hidden="true"
+                      >▶</span
+                    >
+                  }
+                </button>
                 <span class="file-icon" aria-hidden="true">📁</span>
               } @else {
+                <span class="expand-placeholder" aria-hidden="true"></span>
                 <span class="file-icon" aria-hidden="true">📄</span>
               }
-              <span class="file-name">{{ f.name }}</span>
-              <span class="file-path">{{ f.path }}</span>
+              <span class="file-name">{{ row.item.name }}</span>
+              <span class="file-path">{{ row.item.path }}</span>
             </li>
           }
         </ul>
@@ -210,8 +237,8 @@
     <div class="preview-card preview-card-applied" #appliedChangesSection>
       <h3 class="preview-title">Applied changes (before PR)</h3>
       <p class="preview-desc">
-        Files modified by the last Implement run. Review the diff, then run
-        tests and create PR.
+        Files modified by the last Implement run. Review the diff, then create
+        PR when ready.
       </p>
       @if (appliedFiles.length > 0) {
         <div class="applied-section">
@@ -240,19 +267,12 @@
                 (click)="runTestsAndCreatePr()"
                 [disabled]="loadingTestsAndPr"
               >
-                {{
-                  loadingTestsAndPr
-                    ? "Running tests & creating PR…"
-                    : "Run tests & Create PR"
-                }}
+                {{ loadingTestsAndPr ? "Creating PR…" : "Create PR" }}
               </button>
             </div>
           }
           @if (testsAndPrResult) {
-            <div
-              class="tests-pr-result"
-              [class.tests-failed]="!testsAndPrResult.test_passed"
-            >
+            <div class="tests-pr-result">
               <p>{{ testsAndPrResult.message }}</p>
               @if (testsAndPrResult.pr_url) {
                 <a

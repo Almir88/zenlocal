@@ -4,6 +4,44 @@
   and when the branch was created.
 </p>
 
+<div class="toolbar">
+  <div class="filters">
+    <select [(ngModel)]="userId" (change)="onFilter()" class="filter-input">
+      <option value="">All users</option>
+      @for (u of userOptions; track u.id) {
+        <option [value]="u.id">{{ u.name }} ({{ u.email }})</option>
+      }
+    </select>
+    <input
+      type="date"
+      [(ngModel)]="dateFrom"
+      (change)="onFilter()"
+      class="filter-input"
+      placeholder="From"
+    />
+    <input
+      type="date"
+      [(ngModel)]="dateTo"
+      (change)="onFilter()"
+      class="filter-input"
+      placeholder="To"
+    />
+    <input
+      type="text"
+      [(ngModel)]="branchName"
+      (keyup.enter)="onFilter()"
+      placeholder="Branch contains..."
+      class="filter-input"
+    />
+    <button type="button" class="btn btn-secondary" (click)="onFilter()">
+      Apply
+    </button>
+  </div>
+  <button type="button" class="btn btn-primary" (click)="exportCsv()">
+    Export CSV
+  </button>
+</div>
+
 @if (loading) {
   <p class="muted">Loading…</p>
 } @else if (error) {
@@ -23,7 +61,7 @@
         </thead>
         <tbody>
           @for (log of logs; track log.id) {
-            <tr>
+            <tr (click)="openDetail(log)" class="clickable-row">
               <td class="user-cell">
                 {{ log.user?.name ?? "—" }}
                 <span class="user-email">{{ log.user?.email ?? "" }}</span>
@@ -45,6 +83,74 @@
     </div>
     @if (logs.length === 0) {
       <p class="muted">No logs yet.</p>
+    } @else {
+      <div class="pagination">
+        <button
+          type="button"
+          class="btn btn-sm"
+          [disabled]="page <= 1"
+          (click)="goToPage(page - 1)"
+        >
+          Previous
+        </button>
+        <span class="pagination-info">
+          Page {{ page }} of {{ totalPages }} ({{ total }} total)
+        </span>
+        <button
+          type="button"
+          class="btn btn-sm"
+          [disabled]="page >= totalPages"
+          (click)="goToPage(page + 1)"
+        >
+          Next
+        </button>
+      </div>
     }
   </div>
+
+  @if (selectedLog) {
+    <div
+      class="modal-backdrop"
+      (click)="closeDetail()"
+      role="button"
+      tabindex="0"
+      (keydown.escape)="closeDetail()"
+    >
+      <div class="modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Prompt log detail</h3>
+          <button
+            type="button"
+            class="modal-close"
+            (click)="closeDetail()"
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <p>
+            <strong>User:</strong> {{ selectedLog.user?.name ?? "—" }} ({{
+              selectedLog.user?.email ?? "—"
+            }})
+          </p>
+          <p><strong>Branch:</strong> {{ selectedLog.branchName ?? "—" }}</p>
+          <p>
+            <strong>Created at:</strong>
+            {{ selectedLog.createdAt | date: "medium" }}
+          </p>
+          <p>
+            <strong>Branch created at:</strong>
+            {{
+              selectedLog.branchCreatedAt
+                ? (selectedLog.branchCreatedAt | date: "medium")
+                : "—"
+            }}
+          </p>
+          <p><strong>Prompt:</strong></p>
+          <pre class="prompt-full">{{ selectedLog.prompt }}</pre>
+        </div>
+      </div>
+    </div>
+  }
 }
