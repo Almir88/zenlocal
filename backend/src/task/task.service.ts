@@ -9,13 +9,9 @@ import { PromptLogService } from '../auth/prompt-log.service';
 import { ConsumptionService } from '../consumption/consumption.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { ChatDto } from './dto/chat.dto';
+import { FileEdit } from './interfaces/file-edit.interface';
 
 const WORKSPACES_DIR = 'workspaces';
-
-interface FileEdit {
-  path: string;
-  content: string;
-}
 
 type AiProvider =
   | 'groq'
@@ -432,6 +428,40 @@ CRITICAL RULES - you MUST follow these:
     });
   }
 
+  /** Runs npm test in project and returns exit code (0 = passed). */
+  private runTestsInProjectExitCode(projectRoot: string): Promise<number> {
+    return new Promise((resolve) => {
+      const runTest = () => {
+        const proc = spawn('npm', ['run', 'test'], {
+          cwd: projectRoot,
+          shell: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        const timeout = 90_000;
+        const t = setTimeout(() => {
+          proc.kill('SIGTERM');
+          resolve(1);
+        }, timeout);
+        proc.on('close', (code) => {
+          clearTimeout(t);
+          resolve(code === null || code === undefined ? 1 : code);
+        });
+        proc.on('error', () => {
+          clearTimeout(t);
+          resolve(1);
+        });
+      };
+      fs.access(path.join(projectRoot, 'node_modules'))
+        .then(() => runTest())
+        .catch(() => {
+          this.runNpmInstall(projectRoot, () => {}).then((ok) => {
+            if (ok) runTest();
+            else resolve(1);
+          });
+        });
+    });
+  }
+
   private runTestsInProject(
     projectRoot: string,
     step: (msg: string) => void,
@@ -537,6 +567,7 @@ CRITICAL RULES - you MUST follow these:
     pr_url: string | null;
     message: string;
     applied_files: string[];
+    applied_diffs?: { path: string; diff: string }[];
   }> {
     const step = (message: string) => onStep?.({ type: 'step', message });
 
@@ -637,6 +668,7 @@ CRITICAL RULES - you MUST follow these:
       throw e;
     }
 
+    const createPr = dto.create_pr !== false;
     if (edits.length > 0) {
       step(
         `Applying changes to ${edits.length} file(s): ${edits.map((e) => e.path).join(', ')}`,
@@ -645,10 +677,10 @@ CRITICAL RULES - you MUST follow these:
       await repo.add('.');
       await repo.commit(`Applied: ${dto.prompt.slice(0, 80)}`);
       step('Commit created.');
-      if (dto.run_tests) {
+      if (createPr && dto.run_tests) {
         await this.runTestsInProject(projectRoot, step);
       }
-      if (dto.run_verification) {
+      if (createPr && dto.run_verification) {
         await this.verifyImplementationWithAI(
           dto.prompt,
           edits.map((e) => e.path),
@@ -699,31 +731,54 @@ CRITICAL RULES - you MUST follow these:
     }
     await this.promptLogs.setBranchCreatedAt(logId);
 
-    step('Creating pull request…');
-    const prUrl = await this.createPullRequest(
-      fullRepoUrl,
-      branchName,
-      `AI: ${dto.prompt.slice(0, 60)}`,
-    );
+    let prUrl: string | null = null;
+    let appliedDiffs: { path: string; diff: string }[] = [];
+
+    if (createPr) {
+      step('Creating pull request…');
+      prUrl = await this.createPullRequest(
+        fullRepoUrl,
+        branchName,
+        `AI: ${dto.prompt.slice(0, 60)}`,
+      );
+      if (prUrl) {
+        step(`PR created: ${prUrl}`);
+      } else {
+        step('Branch pushed. You can open a PR manually in the repo.');
+      }
+    } else {
+      step('Branch pushed. Run tests and create PR when ready.');
+      const projectDir = dto.project ?? 'backend';
+      for (const e of edits) {
+        const repoRelPath = path.join(projectDir, e.path).replace(/\\/g, '/');
+        try {
+          const out = await repo.diff(['HEAD~1', 'HEAD', '--', repoRelPath]);
+          const diff =
+            typeof out === 'string'
+              ? out
+              : ((out as { diff?: string })?.diff ?? '');
+          appliedDiffs.push({ path: e.path, diff });
+        } catch {
+          appliedDiffs.push({ path: e.path, diff: '' });
+        }
+      }
+    }
 
     await fs
       .rm(workspacePath, { recursive: true, force: true })
       .catch(() => {});
 
-    if (prUrl) {
-      step(`PR created: ${prUrl}`);
-    } else {
-      step('Branch pushed. You can open a PR manually in the repo.');
-    }
-
     return {
       task_id: taskId,
       branch: branchName,
       pr_url: prUrl,
-      message: prUrl
-        ? `Branch ${branchName} pushed and PR created.`
-        : `Branch ${branchName} pushed. Create PR manually from your repo.`,
+      message: createPr
+        ? prUrl
+          ? `Branch ${branchName} pushed and PR created.`
+          : `Branch ${branchName} pushed. Create PR manually from your repo.`
+        : `Branch ${branchName} pushed. Review changes below, then run tests and create PR.`,
       applied_files: edits.map((e) => e.path),
+      ...(appliedDiffs.length > 0 ? { applied_diffs: appliedDiffs } : {}),
     };
   }
 
@@ -763,5 +818,92 @@ CRITICAL RULES - you MUST follow these:
       type: item.type === 'dir' ? 'dir' : 'file',
       path: item.path ?? `${project}/${item.name}`,
     }));
+  }
+
+  /**
+   * Clone branch, run tests, then create PR. Used after implement-only flow.
+   */
+  async runTestsAndCreatePr(dto: {
+    branch_name: string;
+    project?: 'backend' | 'frontend';
+    repo_url?: string;
+  }): Promise<{
+    pr_url: string | null;
+    test_passed: boolean;
+    message: string;
+  }> {
+    const branchName = dto.branch_name?.trim();
+    if (!branchName) {
+      throw new BadRequestException('branch_name is required.');
+    }
+    const fullRepoUrl = this.resolveRepoUrl(dto.repo_url ?? '');
+    const projectDir = dto.project ?? 'backend';
+    const taskId = `pr-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const workspacePath = this.getWorkspacePath(taskId);
+    const cloneUrl = this.repoUrlWithToken(fullRepoUrl);
+
+    await fs.mkdir(path.join(process.cwd(), WORKSPACES_DIR), {
+      recursive: true,
+    });
+    const git = simpleGit();
+    try {
+      await git.clone(cloneUrl, workspacePath, [
+        '--depth',
+        '1',
+        '--branch',
+        branchName,
+      ]);
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message ?? '';
+      if (/branch .* not found|Remote branch .* not found/i.test(msg)) {
+        await fs
+          .rm(workspacePath, { recursive: true, force: true })
+          .catch(() => {});
+        throw new BadRequestException(
+          `Branch "${branchName}" not found on remote. Push it first (e.g. run Implement).`,
+        );
+      }
+      await fs
+        .rm(workspacePath, { recursive: true, force: true })
+        .catch(() => {});
+      throw err;
+    }
+
+    const projectRoot = path.join(workspacePath, projectDir);
+    try {
+      await fs.access(projectRoot);
+    } catch {
+      await fs
+        .rm(workspacePath, { recursive: true, force: true })
+        .catch(() => {});
+      throw new BadRequestException(
+        `Project folder "${projectDir}" not found in repo.`,
+      );
+    }
+
+    const exitCode = await this.runTestsInProjectExitCode(projectRoot);
+    const testPassed = exitCode === 0;
+
+    const prUrl = await this.createPullRequest(
+      fullRepoUrl,
+      branchName,
+      `AI: ${branchName}`,
+    );
+
+    await fs
+      .rm(workspacePath, { recursive: true, force: true })
+      .catch(() => {});
+
+    return {
+      pr_url: prUrl,
+      test_passed: testPassed,
+      message: prUrl
+        ? testPassed
+          ? `Tests passed. PR created: ${prUrl}`
+          : `Tests failed (exit ${exitCode}). PR created anyway: ${prUrl}`
+        : testPassed
+          ? 'Tests passed. Create PR manually in the repo.'
+          : `Tests failed (exit ${exitCode}). Create PR manually in the repo.`,
+    };
   }
 }

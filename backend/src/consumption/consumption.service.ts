@@ -2,14 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AiUsageLog } from '../entities/ai-usage-log.entity';
-
-export interface MonthlyUsage {
-  month: string;
-  provider: string;
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
+import { MonthlyUsage } from './interfaces/monthly-usage.interface';
 
 @Injectable()
 export class ConsumptionService {

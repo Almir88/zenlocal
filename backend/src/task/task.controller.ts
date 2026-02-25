@@ -20,6 +20,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { ChatDto } from './dto/chat.dto';
+import { RunTestsCreatePrDto } from './dto/run-tests-create-pr.dto';
 import { TaskService } from './task.service';
 
 @ApiTags('Task')
@@ -52,7 +53,9 @@ export class TaskController {
   })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async listBranches(@Query('repo_url') repoUrl?: string) {
+  async listBranches(
+    @Query('repo_url') repoUrl?: string,
+  ): Promise<{ branches: string[]; defaultBranch?: string }> {
     return this.taskService.listBranches(repoUrl);
   }
 
@@ -70,7 +73,7 @@ export class TaskController {
   async listRepoFiles(
     @Query('repo_url') repoUrl?: string,
     @Query('project') project?: 'backend' | 'frontend',
-  ) {
+  ): Promise<{ name: string; type: 'dir' | 'file'; path: string }[]> {
     return this.taskService.listProjectFiles(
       repoUrl,
       project === 'frontend' ? 'frontend' : 'backend',
@@ -82,7 +85,10 @@ export class TaskController {
   @ApiResponse({ status: 201, description: 'AI reply' })
   @ApiResponse({ status: 400, description: 'Bad request or AI error' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async chat(@Body() dto: ChatDto, @Req() req: { user: { sub: string } }) {
+  async chat(
+    @Body() dto: ChatDto,
+    @Req() req: { user: { sub: string } },
+  ): Promise<{ reply: string }> {
     return this.taskService.chat(dto);
   }
 
@@ -122,5 +128,22 @@ export class TaskController {
     } finally {
       res.end();
     }
+  }
+
+  @Post('run-tests-and-create-pr')
+  @ApiOperation({
+    summary:
+      'Run tests on a branch and create PR. Call after implement-only (create_pr: false).',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Tests run and PR created (or link to create manually)',
+  })
+  @ApiResponse({ status: 400, description: 'Bad request or branch not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async runTestsAndCreatePr(
+    @Body() dto: RunTestsCreatePrDto,
+  ): Promise<{ pr_url: string | null; test_passed: boolean; message: string }> {
+    return this.taskService.runTestsAndCreatePr(dto);
   }
 }

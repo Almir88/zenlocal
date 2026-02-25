@@ -82,4 +82,11 @@ export class CreateTaskDto {
   })
   @IsOptional()
   run_verification?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'When false, only apply changes and push branch; do not run tests or create PR. Client will call run-tests-and-create-pr separately.',
+  })
+  @IsOptional()
+  create_pr?: boolean;
 }

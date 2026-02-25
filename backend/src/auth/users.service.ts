@@ -23,7 +23,19 @@ export class UsersService {
     });
   }
 
-  async create(email: string, password: string, name: string, roleName: string = 'user'): Promise<User> {
+  async findOne(id: string): Promise<User | null> {
+    return this.userRepo.findOne({
+      where: { id },
+      relations: ['role'],
+    });
+  }
+
+  async create(
+    email: string,
+    password: string,
+    name: string,
+    roleName: string = 'user',
+  ): Promise<User> {
     const key = email.toLowerCase().trim();
     const existing = await this.userRepo.findOne({ where: { email: key } });
     if (existing) throw new ConflictException('User already exists');
@@ -37,11 +49,19 @@ export class UsersService {
       roleId: role.id,
     });
     await this.userRepo.save(user);
-    return this.userRepo.findOne({ where: { id: user.id }, relations: ['role'] }) as Promise<User>;
+    return this.userRepo.findOne({
+      where: { id: user.id },
+      relations: ['role'],
+    }) as Promise<User>;
   }
 
-  async findAll(): Promise<(Omit<User, 'password' | 'role'> & { role: string })[]> {
-    const users = await this.userRepo.find({ relations: ['role'], order: { createdAt: 'DESC' } });
+  async findAll(): Promise<
+    (Omit<User, 'password' | 'role'> & { role: string })[]
+  > {
+    const users = await this.userRepo.find({
+      relations: ['role'],
+      order: { createdAt: 'DESC' },
+    });
     return users.map(({ password: _, ...u }) => ({ ...u, role: u.role.name }));
   }
 }

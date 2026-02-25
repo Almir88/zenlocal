@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PromptLog } from '../entities/prompt-log.entity';
+import type { PromptLogListItem } from './interfaces/prompt-log-list-item.interface';
 
 @Injectable()
 export class PromptLogService {
@@ -26,7 +27,7 @@ export class PromptLogService {
     });
   }
 
-  async findAll() {
+  async findAll(): Promise<PromptLogListItem[]> {
     const logs = await this.repo.find({
       relations: ['user'],
       order: { createdAt: 'DESC' },
@@ -34,7 +35,14 @@ export class PromptLogService {
     });
     return logs.map(({ user, ...log }) => ({
       ...log,
-      user: user ? { id: user.id, email: user.email, name: user.name, role: user.role?.name } : null,
+      user: user
+        ? {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role?.name ?? '',
+          }
+        : null,
     }));
   }
 }

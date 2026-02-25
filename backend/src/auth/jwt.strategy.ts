@@ -17,7 +17,12 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  validate(payload: { sub: string; email?: string; role?: string; name?: string }) {
+  validate(payload: {
+    sub: string;
+    email?: string;
+    role?: string;
+    name?: string;
+  }): { sub: string; email?: string; role?: string; name?: string } {
     if (!payload?.sub) {
       throw new UnauthorizedException('Invalid token');
     }

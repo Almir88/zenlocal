@@ -8,7 +8,8 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { ConsumptionService, MonthlyUsage } from './consumption.service';
+import { ConsumptionService } from './consumption.service';
+import { MonthlyUsage } from './interfaces/monthly-usage.interface';
 
 @ApiTags('consumption')
 @Controller('consumption')
