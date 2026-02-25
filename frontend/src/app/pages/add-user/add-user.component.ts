@@ -19,9 +19,9 @@ import { AuthService } from '../../core/auth.service';
 })
 export class AddUserComponent {
   form: FormGroup;
-  loading = false;
-  success = '';
-  error = '';
+  loading: boolean = false;
+  success: string = '';
+  error: string = '';
 
   constructor(
     private fb: FormBuilder,
@@ -36,7 +36,7 @@ export class AddUserComponent {
     });
   }
 
-  onSubmit() {
+  onSubmit(): void {
     this.error = '';
     this.success = '';
     if (this.form.invalid) {

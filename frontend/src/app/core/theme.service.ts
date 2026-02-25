@@ -1,12 +1,12 @@
 import { Injectable, signal, computed } from '@angular/core';
 
-const STORAGE_KEY = 'zenlocal_theme';
+const STORAGE_KEY: string = 'zenlocal_theme';
 
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
-  private dark = signal<boolean>(this.getStored());
+  private readonly dark = signal<boolean>(this.getStored());
 
-  isDark = computed(() => this.dark());
+  readonly isDark = computed<boolean>(() => this.dark());
 
   constructor() {
     this.apply(this.dark());

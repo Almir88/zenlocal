@@ -16,7 +16,7 @@ import { ThemeService } from '../core/theme.service';
   styleUrl: './layout.component.scss',
 })
 export class LayoutComponent {
-  userMenuOpen = false;
+  userMenuOpen: boolean = false;
 
   constructor(
     public auth: AuthService,
@@ -24,11 +24,11 @@ export class LayoutComponent {
     public theme: ThemeService,
   ) {}
 
-  toggleUserMenu() {
+  toggleUserMenu(): void {
     this.userMenuOpen = !this.userMenuOpen;
   }
 
-  closeUserMenu() {
+  closeUserMenu(): void {
     this.userMenuOpen = false;
   }
 

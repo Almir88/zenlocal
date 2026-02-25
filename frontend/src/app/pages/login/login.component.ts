@@ -17,8 +17,8 @@ import { AuthService } from '../../core/auth.service';
 })
 export class LoginComponent {
   form: FormGroup;
-  error = '';
-  showPassword = false;
+  error: string = '';
+  showPassword: boolean = false;
 
   constructor(
     private fb: FormBuilder,
@@ -30,7 +30,7 @@ export class LoginComponent {
     });
   }
 
-  onSubmit() {
+  onSubmit(): void {
     this.error = '';
     if (this.form.invalid) {
       this.form.markAllAsTouched();

@@ -93,24 +93,6 @@
             Continue on same branch
           </label>
         </div>
-        <div class="checkboxes-row">
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              formControlName="runTests"
-              [disabled]="loading"
-            />
-            Run tests after implement
-          </label>
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              formControlName="runVerification"
-              [disabled]="loading"
-            />
-            Verify with AI (matches request?)
-          </label>
-        </div>
         @if (agentMessages.length > 0) {
           <div class="agent-log" #agentLog>
             @for (msg of agentMessages; track $index) {
@@ -225,15 +207,64 @@
         </p>
       }
     </div>
-    <div class="preview-card">
+    <div class="preview-card preview-card-applied" #appliedChangesSection>
       <h3 class="preview-title">Applied changes (before PR)</h3>
-      <p class="preview-desc">Files modified by the last Implement run.</p>
+      <p class="preview-desc">
+        Files modified by the last Implement run. Review the diff, then run
+        tests and create PR.
+      </p>
       @if (appliedFiles.length > 0) {
-        <ul class="applied-files-list">
-          @for (path of appliedFiles; track path) {
-            <li class="applied-file-item">{{ path }}</li>
+        <div class="applied-section">
+          @if (implementBranch) {
+            <p class="applied-branch">
+              Branch: <strong>{{ implementBranch }}</strong>
+            </p>
           }
-        </ul>
+          @for (filePath of appliedFiles; track filePath) {
+            <div class="applied-file-block">
+              <div class="applied-file-path">{{ filePath }}</div>
+              @if (getDiffForPath(filePath)) {
+                <pre
+                  class="diff-block"
+                ><code>@for (item of getDiffLines(filePath); track $index) {
+                  <span [class.diff-add]="item.type === 'add'" [class.diff-del]="item.type === 'del'">{{ item.line }}</span>
+                }</code></pre>
+              }
+            </div>
+          }
+          @if (implementBranch) {
+            <div class="run-tests-row">
+              <button
+                type="button"
+                class="btn-run-tests-pr"
+                (click)="runTestsAndCreatePr()"
+                [disabled]="loadingTestsAndPr"
+              >
+                {{
+                  loadingTestsAndPr
+                    ? "Running tests & creating PR…"
+                    : "Run tests & Create PR"
+                }}
+              </button>
+            </div>
+          }
+          @if (testsAndPrResult) {
+            <div
+              class="tests-pr-result"
+              [class.tests-failed]="!testsAndPrResult.test_passed"
+            >
+              <p>{{ testsAndPrResult.message }}</p>
+              @if (testsAndPrResult.pr_url) {
+                <a
+                  [href]="testsAndPrResult.pr_url"
+                  target="_blank"
+                  rel="noopener"
+                  >Open pull request</a
+                >
+              }
+            </div>
+          }
+        </div>
       } @else {
         <p class="preview-empty">
           No applied changes yet. Use Implement to see modified files here.

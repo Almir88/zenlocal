@@ -15,23 +15,21 @@ import {
 import { Subject, takeUntil } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth.service';
+import type {
+  AgentMessage,
+  AppliedFileDiff,
+  ConversationMessage,
+  DiffLine,
+  ImplementResult,
+  RepoFileItem,
+  TestsAndPrResult,
+} from './models/prompt.models';
 
-export interface AgentMessage {
-  type: 'step' | 'result' | 'error';
-  message?: string;
-}
-
-export interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  steps?: string[];
-}
-
-export interface RepoFileItem {
-  name: string;
-  type: 'dir' | 'file';
-  path: string;
-}
+export type {
+  AgentMessage,
+  ConversationMessage,
+  RepoFileItem,
+} from './models/prompt.models';
 
 @Component({
   selector: 'app-prompt',
@@ -42,23 +40,29 @@ export interface RepoFileItem {
 })
 export class PromptComponent implements OnInit, OnDestroy {
   form: FormGroup;
-  loading = false;
-  result: { branch?: string; pr_url?: string; message?: string } | null = null;
-  error = '';
-  showPromptRequired = false;
+  loading: boolean = false;
+  result: ImplementResult | null = null;
+  error: string = '';
+  showPromptRequired: boolean = false;
   agentMessages: AgentMessage[] = [];
   conversation: ConversationMessage[] = [];
-  loadingChat = false;
+  loadingChat: boolean = false;
   branches: string[] = [];
-  loadBranchesLoading = false;
+  loadBranchesLoading: boolean = false;
   defaultBranch: string | null = null;
   projectFiles: RepoFileItem[] = [];
-  projectFilesLoading = false;
+  projectFilesLoading: boolean = false;
   appliedFiles: string[] = [];
-  private destroy$ = new Subject<void>();
+  appliedDiffs: AppliedFileDiff[] = [];
+  implementBranch: string | null = null;
+  loadingTestsAndPr: boolean = false;
+  testsAndPrResult: TestsAndPrResult | null = null;
+  private readonly destroy$ = new Subject<void>();
 
   @ViewChild('agentLog') agentLogRef?: ElementRef<HTMLDivElement>;
   @ViewChild('conversationEnd') conversationEndRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('appliedChangesSection')
+  appliedChangesSectionRef?: ElementRef<HTMLElement>;
 
   readonly aiProviders = [
     { value: 'groq', label: 'Groq' },
@@ -99,8 +103,6 @@ export class PromptComponent implements OnInit, OnDestroy {
           | 'rasa',
       ],
       project: ['backend' as 'backend' | 'frontend'],
-      runTests: [true],
-      runVerification: [true],
     });
   }
 
@@ -255,15 +257,8 @@ export class PromptComponent implements OnInit, OnDestroy {
       this.form.markAllAsTouched();
       return;
     }
-    const {
-      prompt,
-      branchName,
-      continueOnBranch,
-      aiProvider,
-      project,
-      runTests,
-      runVerification,
-    } = this.form.getRawValue();
+    const { prompt, branchName, continueOnBranch, aiProvider, project } =
+      this.form.getRawValue();
     if (continueOnBranch && !branchName?.trim()) {
       this.error =
         'Branch name is required when continuing on the same branch.';
@@ -276,6 +271,7 @@ export class PromptComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.cdr.detectChanges();
     this.scrollConversationToEnd();
+    this.scrollToAppliedChanges();
 
     const body: {
       prompt: string;
@@ -283,17 +279,15 @@ export class PromptComponent implements OnInit, OnDestroy {
       continue_on_branch?: boolean;
       ai_provider?: string;
       project?: string;
-      run_tests?: boolean;
-      run_verification?: boolean;
+      create_pr?: boolean;
     } = {
       prompt: prompt.trim(),
       ai_provider: aiProvider,
       project,
+      create_pr: false,
     };
     if (branchName?.trim()) body.branch_name = branchName.trim();
     if (continueOnBranch) body.continue_on_branch = true;
-    if (runTests) body.run_tests = true;
-    if (runVerification) body.run_verification = true;
 
     const token = this.auth.getToken();
     this.form.disable();
@@ -344,6 +338,7 @@ export class PromptComponent implements OnInit, OnDestroy {
                 pr_url?: string | null;
                 task_id?: string;
                 applied_files?: string[];
+                applied_diffs?: { path: string; diff: string }[];
               };
               if (event.type === 'step' && event.message) {
                 this.agentMessages = [
@@ -375,6 +370,11 @@ export class PromptComponent implements OnInit, OnDestroy {
                 this.appliedFiles = Array.isArray(event.applied_files)
                   ? event.applied_files
                   : [];
+                this.appliedDiffs = Array.isArray(event.applied_diffs)
+                  ? event.applied_diffs
+                  : [];
+                if (event.branch) this.implementBranch = event.branch;
+                this.testsAndPrResult = null;
                 const next = [...this.conversation];
                 const last = next[assistantIndex];
                 if (last && last.role === 'assistant') {
@@ -429,6 +429,61 @@ export class PromptComponent implements OnInit, OnDestroy {
       });
   }
 
+  getDiffForPath(filePath: string): string {
+    return this.appliedDiffs.find((d) => d.path === filePath)?.diff ?? '';
+  }
+
+  getDiffLines(filePath: string): DiffLine[] {
+    const diff = this.getDiffForPath(filePath);
+    if (!diff) return [];
+    return diff.split(/\n/).map((line) => {
+      if (line.startsWith('+') && !line.startsWith('+++'))
+        return { line, type: 'add' as const };
+      if (line.startsWith('-') && !line.startsWith('---'))
+        return { line, type: 'del' as const };
+      return { line, type: 'ctx' as const };
+    });
+  }
+
+  runTestsAndCreatePr(): void {
+    if (!this.implementBranch) return;
+    this.testsAndPrResult = null;
+    this.loadingTestsAndPr = true;
+    this.error = '';
+    this.cdr.detectChanges();
+    const project = this.form.get('project')?.value as 'backend' | 'frontend';
+    const token = this.auth.getToken();
+    fetch(`${environment.apiUrl}/task/run-tests-and-create-pr`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        branch_name: this.implementBranch,
+        project: project ?? 'backend',
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            (data as { message?: string }).message ?? 'Request failed',
+          );
+        }
+        this.testsAndPrResult = data as TestsAndPrResult;
+        this.cdr.detectChanges();
+      })
+      .catch((err: Error) => {
+        this.error = err.message;
+        this.cdr.detectChanges();
+      })
+      .finally(() => {
+        this.loadingTestsAndPr = false;
+        this.cdr.detectChanges();
+      });
+  }
+
   private scrollLogToBottom(): void {
     const el = this.agentLogRef?.nativeElement;
     if (el) el.scrollTop = el.scrollHeight;
@@ -438,6 +493,13 @@ export class PromptComponent implements OnInit, OnDestroy {
     this.conversationEndRef?.nativeElement?.scrollIntoView({
       behavior: 'smooth',
       block: 'end',
+    });
+  }
+
+  private scrollToAppliedChanges(): void {
+    this.appliedChangesSectionRef?.nativeElement?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
     });
   }
 }

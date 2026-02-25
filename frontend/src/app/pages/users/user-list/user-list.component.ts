@@ -2,14 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { environment } from '../../../../environments/environment';
+import type { UserRow } from './models/user-row.interface';
 
-export interface UserRow {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  createdAt: string;
-}
+export type { UserRow } from './models/user-row.interface';
 
 @Component({
   selector: 'app-user-list',
@@ -20,16 +15,16 @@ export interface UserRow {
 })
 export class UserListComponent implements OnInit {
   users: UserRow[] = [];
-  loading = true;
-  error = '';
+  loading: boolean = true;
+  error: string = '';
 
   constructor(private http: HttpClient) {}
 
-  ngOnInit() {
+  ngOnInit(): void {
     this.loadUsers();
   }
 
-  loadUsers() {
+  loadUsers(): void {
     this.loading = true;
     this.error = '';
     this.http.get<UserRow[]>(`${environment.apiUrl}/auth/users`).subscribe({

@@ -1,22 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
-
-export interface MonthlyUsage {
-  month: string;
-  provider: string;
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
-
-interface MonthRow {
-  month: string;
-  monthLabel: string;
-  groq: { promptTokens: number; completionTokens: number; totalTokens: number };
-  openai: { promptTokens: number; completionTokens: number; totalTokens: number };
-  totalTokens: number;
-}
+import type { MonthlyUsage, MonthRow } from './models/consumption.models';
 
 @Component({
   selector: 'app-consumption',
@@ -27,12 +12,12 @@ interface MonthRow {
 })
 export class ConsumptionComponent implements OnInit {
   rows: MonthRow[] = [];
-  loading = true;
-  error = '';
+  loading: boolean = true;
+  error: string = '';
 
   constructor(private http: HttpClient) {}
 
-  ngOnInit() {
+  ngOnInit(): void {
     this.http
       .get<MonthlyUsage[]>(`${environment.apiUrl}/auth/consumption`)
       .subscribe({
@@ -42,7 +27,10 @@ export class ConsumptionComponent implements OnInit {
         },
         error: (err) => {
           this.loading = false;
-          this.error = err.error?.message ?? err.error?.detail ?? 'Failed to load consumption';
+          this.error =
+            err.error?.message ??
+            err.error?.detail ??
+            'Failed to load consumption';
         },
       });
   }
@@ -52,7 +40,11 @@ export class ConsumptionComponent implements OnInit {
       string,
       { groq: MonthRow['groq']; openai: MonthRow['openai'] }
     >();
-    const empty = () => ({
+    const empty = (): {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    } => ({
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
@@ -73,11 +65,12 @@ export class ConsumptionComponent implements OnInit {
         row.openai.totalTokens += u.totalTokens;
       }
     }
-    const months = Array.from(byMonth.keys()).sort((a, b) => b.localeCompare(a));
+    const months = Array.from(byMonth.keys()).sort((a, b) =>
+      b.localeCompare(a),
+    );
     return months.map((month) => {
       const r = byMonth.get(month)!;
-      const totalTokens =
-        r.groq.totalTokens + r.openai.totalTokens;
+      const totalTokens = r.groq.totalTokens + r.openai.totalTokens;
       const [y, m] = month.split('-');
       const monthLabel = `${y}-${m}`;
       return {
