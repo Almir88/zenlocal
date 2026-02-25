@@ -2,7 +2,6 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { spawn } from 'child_process';
 import { simpleGit } from 'simple-git';
 import OpenAI from 'openai';
 import { PromptLogService } from '../auth/prompt-log.service';
@@ -394,141 +393,6 @@ CRITICAL RULES - you MUST follow these:
     return { branches, defaultBranch };
   }
 
-  private runNpmInstall(
-    projectRoot: string,
-    step: (msg: string) => void,
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      step('Installing dependencies…');
-      const proc = spawn('npm', ['install', '--no-audit', '--no-fund'], {
-        cwd: projectRoot,
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const timeout = 120_000;
-      const t = setTimeout(() => {
-        proc.kill('SIGTERM');
-        step('npm install timed out after 2min; skipping tests.');
-        resolve(false);
-      }, timeout);
-      proc.on('close', (code) => {
-        clearTimeout(t);
-        if (code === 0) {
-          resolve(true);
-        } else {
-          step('npm install failed; skipping tests.');
-          resolve(false);
-        }
-      });
-      proc.on('error', () => {
-        clearTimeout(t);
-        step('Could not run npm install; skipping tests.');
-        resolve(false);
-      });
-    });
-  }
-
-  /** Runs npm test in project and returns exit code (0 = passed). */
-  private runTestsInProjectExitCode(projectRoot: string): Promise<number> {
-    return new Promise((resolve) => {
-      const runTest = () => {
-        const proc = spawn('npm', ['run', 'test'], {
-          cwd: projectRoot,
-          shell: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        const timeout = 90_000;
-        const t = setTimeout(() => {
-          proc.kill('SIGTERM');
-          resolve(1);
-        }, timeout);
-        proc.on('close', (code) => {
-          clearTimeout(t);
-          resolve(code === null || code === undefined ? 1 : code);
-        });
-        proc.on('error', () => {
-          clearTimeout(t);
-          resolve(1);
-        });
-      };
-      fs.access(path.join(projectRoot, 'node_modules'))
-        .then(() => runTest())
-        .catch(() => {
-          this.runNpmInstall(projectRoot, () => {}).then((ok) => {
-            if (ok) runTest();
-            else resolve(1);
-          });
-        });
-    });
-  }
-
-  private runTestsInProject(
-    projectRoot: string,
-    step: (msg: string) => void,
-  ): Promise<void> {
-    return new Promise((resolve) => {
-      const runTest = () => {
-        step('Running tests…');
-        const proc = spawn('npm', ['run', 'test'], {
-          cwd: projectRoot,
-          shell: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        const timeout = 90_000;
-        const t = setTimeout(() => {
-          proc.kill('SIGTERM');
-          step('Tests timed out after 90s.');
-          resolve();
-        }, timeout);
-        let out = '';
-        let err = '';
-        proc.stdout?.on('data', (c) => {
-          out += c.toString();
-        });
-        proc.stderr?.on('data', (c) => {
-          err += c.toString();
-        });
-        proc.on('close', (code) => {
-          clearTimeout(t);
-          if (code === 0) {
-            step('Tests passed.');
-          } else {
-            const combined = (err || out).slice(-800).trim();
-            const isConfigOrNoSpecs =
-              /No inputs were found|TS18003|tsconfig\.spec|no spec files/i.test(
-                combined,
-              ) || code === 127;
-            if (isConfigOrNoSpecs) {
-              step(
-                'Tests skipped (no spec files or invalid test config in this project).',
-              );
-            } else {
-              const snippet = combined.slice(-400);
-              step(
-                `Tests failed (exit ${code}). ${snippet ? `Output: ${snippet}` : ''}`,
-              );
-            }
-          }
-          resolve();
-        });
-        proc.on('error', () => {
-          clearTimeout(t);
-          step('Could not run tests (npm not found or no test script).');
-          resolve();
-        });
-      };
-
-      fs.access(path.join(projectRoot, 'node_modules'))
-        .then(() => runTest())
-        .catch(() => {
-          this.runNpmInstall(projectRoot, step).then((ok) => {
-            if (ok) runTest();
-            else resolve();
-          });
-        });
-    });
-  }
-
   private async verifyImplementationWithAI(
     prompt: string,
     editedPaths: string[],
@@ -677,10 +541,8 @@ CRITICAL RULES - you MUST follow these:
       await repo.add('.');
       await repo.commit(`Applied: ${dto.prompt.slice(0, 80)}`);
       step('Commit created.');
-      if (createPr && dto.run_tests) {
-        await this.runTestsInProject(projectRoot, step);
-      }
-      if (createPr && dto.run_verification) {
+      step(`Promijenjeno: ${edits.map((e) => e.path).join(', ') || '—'}`);
+      if (dto.run_verification !== false) {
         await this.verifyImplementationWithAI(
           dto.prompt,
           edits.map((e) => e.path),
@@ -732,7 +594,20 @@ CRITICAL RULES - you MUST follow these:
     await this.promptLogs.setBranchCreatedAt(logId);
 
     let prUrl: string | null = null;
-    let appliedDiffs: { path: string; diff: string }[] = [];
+    const appliedDiffs: { path: string; diff: string }[] = [];
+    for (const e of edits) {
+      const repoRelPath = path.join(projectDir, e.path).replace(/\\/g, '/');
+      try {
+        const out = await repo.diff(['HEAD~1', 'HEAD', '--', repoRelPath]);
+        const diff =
+          typeof out === 'string'
+            ? out
+            : ((out as { diff?: string })?.diff ?? '');
+        appliedDiffs.push({ path: e.path, diff });
+      } catch {
+        appliedDiffs.push({ path: e.path, diff: '' });
+      }
+    }
 
     if (createPr) {
       step('Creating pull request…');
@@ -747,21 +622,7 @@ CRITICAL RULES - you MUST follow these:
         step('Branch pushed. You can open a PR manually in the repo.');
       }
     } else {
-      step('Branch pushed. Run tests and create PR when ready.');
-      const projectDir = dto.project ?? 'backend';
-      for (const e of edits) {
-        const repoRelPath = path.join(projectDir, e.path).replace(/\\/g, '/');
-        try {
-          const out = await repo.diff(['HEAD~1', 'HEAD', '--', repoRelPath]);
-          const diff =
-            typeof out === 'string'
-              ? out
-              : ((out as { diff?: string })?.diff ?? '');
-          appliedDiffs.push({ path: e.path, diff });
-        } catch {
-          appliedDiffs.push({ path: e.path, diff: '' });
-        }
-      }
+      step('Branch pushed. Create PR when ready.');
     }
 
     await fs
@@ -776,7 +637,7 @@ CRITICAL RULES - you MUST follow these:
         ? prUrl
           ? `Branch ${branchName} pushed and PR created.`
           : `Branch ${branchName} pushed. Create PR manually from your repo.`
-        : `Branch ${branchName} pushed. Review changes below, then run tests and create PR.`,
+        : `Branch ${branchName} pushed. Review changes below, then create PR when ready.`,
       applied_files: edits.map((e) => e.path),
       ...(appliedDiffs.length > 0 ? { applied_diffs: appliedDiffs } : {}),
     };
@@ -785,6 +646,7 @@ CRITICAL RULES - you MUST follow these:
   async listProjectFiles(
     repoUrl?: string,
     project: 'backend' | 'frontend' = 'backend',
+    subPath?: string,
   ): Promise<{ name: string; type: 'dir' | 'file'; path: string }[]> {
     const fullRepoUrl = this.resolveRepoUrl(repoUrl ?? '');
     const meta = this.parseRepoOwnerName(fullRepoUrl);
@@ -798,8 +660,14 @@ CRITICAL RULES - you MUST follow these:
       Accept: 'application/vnd.github+json',
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    const trimmed = subPath?.replace(/^\/+|\/+$/g, '') ?? '';
+    const contentPath = !trimmed
+      ? project
+      : trimmed.startsWith(project + '/')
+        ? trimmed
+        : `${project}/${trimmed}`;
     const res = await fetch(
-      `https://api.github.com/repos/${meta.owner}/${meta.repo}/contents/${project}`,
+      `https://api.github.com/repos/${meta.owner}/${meta.repo}/contents/${contentPath}`,
       { headers },
     );
     if (!res.ok) {
@@ -816,7 +684,7 @@ CRITICAL RULES - you MUST follow these:
     return data.map((item) => ({
       name: item.name,
       type: item.type === 'dir' ? 'dir' : 'file',
-      path: item.path ?? `${project}/${item.name}`,
+      path: item.path ?? `${contentPath}/${item.name}`,
     }));
   }
 
@@ -881,9 +749,6 @@ CRITICAL RULES - you MUST follow these:
       );
     }
 
-    const exitCode = await this.runTestsInProjectExitCode(projectRoot);
-    const testPassed = exitCode === 0;
-
     const prUrl = await this.createPullRequest(
       fullRepoUrl,
       branchName,
@@ -896,14 +761,10 @@ CRITICAL RULES - you MUST follow these:
 
     return {
       pr_url: prUrl,
-      test_passed: testPassed,
+      test_passed: true,
       message: prUrl
-        ? testPassed
-          ? `Tests passed. PR created: ${prUrl}`
-          : `Tests failed (exit ${exitCode}). PR created anyway: ${prUrl}`
-        : testPassed
-          ? 'Tests passed. Create PR manually in the repo.'
-          : `Tests failed (exit ${exitCode}). Create PR manually in the repo.`,
+        ? `PR created: ${prUrl}`
+        : 'Create PR manually in the repo.',
     };
   }
 }

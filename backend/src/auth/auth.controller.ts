@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -13,6 +23,8 @@ import { Roles } from './roles.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { UsersService } from './users.service';
 import { PromptLogService } from './prompt-log.service';
 import { ConsumptionService } from '../consumption/consumption.service';
@@ -40,7 +52,7 @@ export class AuthController {
   }
 
   @Post('login')
-  @ApiOperation({ summary: 'Login with email and password (for dashboard)' })
+  @ApiOperation({ summary: 'Login with email and password' })
   async login(@Body() dto: LoginDto): Promise<LoginResponse> {
     return this.auth.login(dto.email, dto.password);
   }
@@ -67,6 +79,39 @@ export class AuthController {
     return { id: u.sub, email: u.email, name: u.name, role: u.role };
   }
 
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update current user profile (name, email)' })
+  async updateMe(
+    @Body() dto: UpdateProfileDto,
+    @Req() req: { user: { sub: string } },
+  ): Promise<{ id: string; email: string; name: string; role: string }> {
+    const user = await this.users.updateProfile(req.user.sub, dto);
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role.name,
+    };
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change current user password' })
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Req() req: { user: { sub: string } },
+  ): Promise<{ message: string }> {
+    await this.users.changePassword(
+      req.user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+    return { message: 'Password updated' };
+  }
+
   @Post('users')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -74,6 +119,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Add user (admin only)' })
   async addUser(
     @Body() dto: CreateUserDto,
+    @Req() req: { user: { sub: string } },
   ): Promise<{ id: string; email: string; name: string; role: string }> {
     const user = await this.users.create(
       dto.email,
@@ -90,24 +136,58 @@ export class AuthController {
   }
 
   @Get('users')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List users (admin only)' })
-  listUsers(): Promise<(Omit<User, 'password' | 'role'> & { role: string })[]> {
-    return this.users.findAll();
+  listUsers(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ): Promise<{
+    items: (Omit<User, 'password' | 'role'> & { role: string })[];
+    total: number;
+  }> {
+    return this.users.findAll({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+    }) as Promise<{
+      items: (Omit<User, 'password' | 'role'> & { role: string })[];
+      total: number;
+    }>;
   }
 
   @Get('prompt-logs')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List prompt logs (admin only)' })
-  listPromptLogs(): Promise<PromptLogListItem[]> {
-    return this.promptLogs.findAll();
+  listPromptLogs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('userId') userId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('branchName') branchName?: string,
+  ): Promise<{ items: PromptLogListItem[]; total: number }> {
+    return this.promptLogs.findAll({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      userId,
+      dateFrom,
+      dateTo,
+      branchName,
+    });
   }
 
   @Get('consumption')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
+  @Header('Pragma', 'no-cache')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()

@@ -62,7 +62,7 @@ export class TaskController {
   @Get('repo-files')
   @ApiOperation({
     summary:
-      'List top-level files/folders in the selected project (frontend/backend)',
+      'List files/folders in the selected project (optional path for subfolders)',
   })
   @ApiResponse({
     status: 200,
@@ -73,10 +73,12 @@ export class TaskController {
   async listRepoFiles(
     @Query('repo_url') repoUrl?: string,
     @Query('project') project?: 'backend' | 'frontend',
+    @Query('path') subPath?: string,
   ): Promise<{ name: string; type: 'dir' | 'file'; path: string }[]> {
     return this.taskService.listProjectFiles(
       repoUrl,
       project === 'frontend' ? 'frontend' : 'backend',
+      subPath,
     );
   }
 

@@ -33,6 +33,28 @@ export class ConsumptionService {
     await this.repo.save(entry);
   }
 
+  async getSummaryForMonths(
+    limitMonths = 6,
+  ): Promise<{ month: string; groq: number; openai: number; total: number }[]> {
+    const raw = await this.getMonthly(limitMonths);
+    const byMonth = new Map<string, { groq: number; openai: number }>();
+    for (const u of raw) {
+      if (!byMonth.has(u.month)) byMonth.set(u.month, { groq: 0, openai: 0 });
+      const row = byMonth.get(u.month)!;
+      const p = u.provider.toLowerCase();
+      if (p === 'groq') row.groq += u.totalTokens;
+      else if (p === 'openai') row.openai += u.totalTokens;
+    }
+    return Array.from(byMonth.entries())
+      .map(([month, v]) => ({
+        month,
+        groq: v.groq,
+        openai: v.openai,
+        total: v.groq + v.openai,
+      }))
+      .sort((a, b) => b.month.localeCompare(a.month));
+  }
+
   async getMonthly(limitMonths = 24): Promise<MonthlyUsage[]> {
     const result = await this.repo
       .createQueryBuilder('u')

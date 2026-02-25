@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -55,13 +59,86 @@ export class UsersService {
     }) as Promise<User>;
   }
 
-  async findAll(): Promise<
-    (Omit<User, 'password' | 'role'> & { role: string })[]
-  > {
-    const users = await this.userRepo.find({
+  async findAll(opts?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }): Promise<{
+    items: (Omit<User, 'password' | 'role'> & { role: string })[];
+    total: number;
+  }> {
+    const page = Math.max(1, opts?.page ?? 1);
+    const limit = Math.min(2000, Math.max(1, opts?.limit ?? 500));
+    const skip = (page - 1) * limit;
+    const search = opts?.search?.trim();
+
+    let users: User[];
+    let total: number;
+
+    if (search) {
+      const qb = this.userRepo
+        .createQueryBuilder('user')
+        .leftJoinAndSelect('user.role', 'role')
+        .orderBy('user.created_at', 'DESC')
+        .where('user.email ILIKE :s OR user.name ILIKE :s', {
+          s: `%${search}%`,
+        });
+      [users, total] = await qb.skip(skip).take(limit).getManyAndCount();
+    } else {
+      [users, total] = await this.userRepo.findAndCount({
+        relations: ['role'],
+        order: { createdAt: 'DESC' },
+        skip,
+        take: limit,
+      });
+    }
+
+    const items = users.map(({ password: _, ...u }) => ({
+      ...u,
+      role: u.role?.name ?? 'user',
+    }));
+
+    return { items, total };
+  }
+
+  async count(): Promise<number> {
+    return this.userRepo.count();
+  }
+
+  async updateProfile(
+    userId: string,
+    data: { name?: string; email?: string },
+  ): Promise<User> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    if (data.email !== undefined) {
+      const key = data.email.toLowerCase().trim();
+      const existing = await this.userRepo.findOne({
+        where: { email: key },
+      });
+      if (existing && existing.id !== userId) {
+        throw new ConflictException('Email already in use');
+      }
+      user.email = key;
+    }
+    if (data.name !== undefined) user.name = data.name.trim();
+    await this.userRepo.save(user);
+    return this.userRepo.findOne({
+      where: { id: userId },
       relations: ['role'],
-      order: { createdAt: 'DESC' },
-    });
-    return users.map(({ password: _, ...u }) => ({ ...u, role: u.role.name }));
+    }) as Promise<User>;
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) throw new BadRequestException('Current password is incorrect');
+    user.password = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await this.userRepo.save(user);
   }
 }

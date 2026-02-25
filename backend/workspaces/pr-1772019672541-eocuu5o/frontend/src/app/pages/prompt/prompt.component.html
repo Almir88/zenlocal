@@ -1,0 +1,275 @@
+<div class="prompt-page">
+  <div class="prompt-left">
+    <h2 class="section-title">Prompt</h2>
+    <p class="app-desc">
+      Chat with the AI or ask it to implement changes. Use
+      <strong>Send</strong> to talk; use <strong>Implement</strong> to apply
+      changes on a branch (new or continue on same branch). Set API keys in .env
+      for Groq/OpenAI.
+    </p>
+    <div class="card prompt-card">
+      <form [formGroup]="form" class="prompt-form">
+        <div class="form-row select-row">
+          <div class="form-group">
+            <label class="ai-label">Project</label>
+            <select
+              formControlName="project"
+              class="ai-select"
+              [disabled]="loading"
+            >
+              @for (opt of projects; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="ai-label">AI provider</label>
+            <select
+              formControlName="aiProvider"
+              class="ai-select"
+              [disabled]="loading"
+            >
+              @for (opt of aiProviders; track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+        <textarea
+          formControlName="prompt"
+          placeholder="Ask something or describe what to implement (e.g. Add login page)"
+          rows="3"
+          [disabled]="loading || loadingChat"
+          (input)="showPromptRequired = false"
+        ></textarea>
+        @if (showPromptRequired) {
+          <p class="field-error">Prompt is required</p>
+        }
+        <div class="branch-row">
+          <input
+            type="text"
+            formControlName="branchName"
+            [placeholder]="
+              form.get('continueOnBranch')?.value
+                ? 'Branch name (required)'
+                : 'Branch name (optional)'
+            "
+            [disabled]="loading"
+            class="branch-input"
+          />
+          <button
+            type="button"
+            class="btn-load-branches"
+            (click)="loadBranches()"
+            [disabled]="loading || loadBranchesLoading"
+          >
+            {{ loadBranchesLoading ? "Loading…" : "Load branches" }}
+          </button>
+          @if (branches.length > 0) {
+            <select
+              class="branch-select"
+              [disabled]="loading"
+              (change)="
+                form.patchValue({ branchName: $any($event.target).value })
+              "
+            >
+              <option value="">— Select branch —</option>
+              @for (b of branches; track b) {
+                <option
+                  [value]="b"
+                  [selected]="form.get('branchName')?.value === b"
+                >
+                  {{ b }}{{ defaultBranch === b ? " (default)" : "" }}
+                </option>
+              }
+            </select>
+          }
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              formControlName="continueOnBranch"
+              [disabled]="loading"
+            />
+            Continue on same branch
+          </label>
+        </div>
+        @if (agentMessages.length > 0) {
+          <div class="agent-log" #agentLog>
+            @for (msg of agentMessages; track $index) {
+              <p
+                class="agent-msg"
+                [class.agent-step]="msg.type === 'step'"
+                [class.agent-result]="msg.type === 'result'"
+                [class.agent-error]="msg.type === 'error'"
+              >
+                {{ msg.message }}
+              </p>
+            }
+          </div>
+        }
+        @if (error) {
+          <p class="error">{{ error }}</p>
+        }
+        @if (result) {
+          <div class="result">
+            <p>{{ result.message }}</p>
+            @if (result.pr_url) {
+              <a [href]="result.pr_url" target="_blank" rel="noopener"
+                >Open pull request</a
+              >
+            }
+          </div>
+        }
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-send"
+            (click)="sendChat()"
+            [disabled]="
+              !form.get('prompt')?.value?.trim() || loading || loadingChat
+            "
+          >
+            Send
+          </button>
+          <button
+            type="button"
+            class="btn-implement"
+            (click)="runImplement()"
+            [disabled]="form.invalid || loading || loadingChat"
+          >
+            {{ loading ? "Implementing…" : "Implement" }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="prompt-right">
+    <h2 class="section-title">Chat</h2>
+    <div class="conversation" #conversationContainer>
+      @for (msg of conversation; track $index) {
+        <div
+          class="conversation-msg"
+          [class.user]="msg.role === 'user'"
+          [class.assistant]="msg.role === 'assistant'"
+        >
+          @if (msg.role === "user") {
+            <p class="msg-content">{{ msg.content }}</p>
+          } @else {
+            @if (msg.steps && msg.steps.length > 0) {
+              <div class="msg-steps">
+                @for (s of msg.steps; track $index) {
+                  <p class="msg-step">{{ s }}</p>
+                }
+              </div>
+            }
+            @if (msg.content) {
+              <p class="msg-content">{{ msg.content }}</p>
+            }
+          }
+        </div>
+      }
+      @if (loadingChat) {
+        <div class="conversation-msg assistant">
+          <p class="msg-content msg-loading">…</p>
+        </div>
+      }
+      <div #conversationEnd></div>
+    </div>
+  </div>
+
+  <div class="prompt-bottom">
+    <div class="preview-card">
+      <h3 class="preview-title">Project structure</h3>
+      <p class="preview-desc">
+        Folders and files in the selected project ({{
+          form.get("project")?.value || "backend"
+        }}).
+      </p>
+      @if (projectFilesLoading) {
+        <p class="preview-loading">Loading…</p>
+      } @else if (projectFiles.length > 0) {
+        <ul class="repo-files-list">
+          @for (f of projectFiles; track f.path) {
+            <li class="repo-file-item" [class.dir]="f.type === 'dir'">
+              @if (f.type === "dir") {
+                <span class="file-icon" aria-hidden="true">📁</span>
+              } @else {
+                <span class="file-icon" aria-hidden="true">📄</span>
+              }
+              <span class="file-name">{{ f.name }}</span>
+              <span class="file-path">{{ f.path }}</span>
+            </li>
+          }
+        </ul>
+      } @else if (!projectFilesLoading) {
+        <p class="preview-empty">
+          Select a project to see its structure, or repo not available.
+        </p>
+      }
+    </div>
+    <div class="preview-card preview-card-applied" #appliedChangesSection>
+      <h3 class="preview-title">Applied changes (before PR)</h3>
+      <p class="preview-desc">
+        Files modified by the last Implement run. Review the diff, then run
+        tests and create PR.
+      </p>
+      @if (appliedFiles.length > 0) {
+        <div class="applied-section">
+          @if (implementBranch) {
+            <p class="applied-branch">
+              Branch: <strong>{{ implementBranch }}</strong>
+            </p>
+          }
+          @for (filePath of appliedFiles; track filePath) {
+            <div class="applied-file-block">
+              <div class="applied-file-path">{{ filePath }}</div>
+              @if (getDiffForPath(filePath)) {
+                <pre
+                  class="diff-block"
+                ><code>@for (item of getDiffLines(filePath); track $index) {
+                  <span [class.diff-add]="item.type === 'add'" [class.diff-del]="item.type === 'del'">{{ item.line }}</span>
+                }</code></pre>
+              }
+            </div>
+          }
+          @if (implementBranch) {
+            <div class="run-tests-row">
+              <button
+                type="button"
+                class="btn-run-tests-pr"
+                (click)="runTestsAndCreatePr()"
+                [disabled]="loadingTestsAndPr"
+              >
+                {{
+                  loadingTestsAndPr
+                    ? "Running tests & creating PR…"
+                    : "Run tests & Create PR"
+                }}
+              </button>
+            </div>
+          }
+          @if (testsAndPrResult) {
+            <div
+              class="tests-pr-result"
+              [class.tests-failed]="!testsAndPrResult.test_passed"
+            >
+              <p>{{ testsAndPrResult.message }}</p>
+              @if (testsAndPrResult.pr_url) {
+                <a
+                  [href]="testsAndPrResult.pr_url"
+                  target="_blank"
+                  rel="noopener"
+                  >Open pull request</a
+                >
+              }
+            </div>
+          }
+        </div>
+      } @else {
+        <p class="preview-empty">
+          No applied changes yet. Use Implement to see modified files here.
+        </p>
+      }
+    </div>
+  </div>
+</div>

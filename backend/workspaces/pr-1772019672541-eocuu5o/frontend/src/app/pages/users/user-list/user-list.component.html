@@ -1,0 +1,43 @@
+<h2 class="section-title">All users</h2>
+<p class="section-desc">Overview of all registered users.</p>
+
+@if (loading) {
+  <p class="muted">Loading…</p>
+} @else if (error) {
+  <p class="error">{{ error }}</p>
+} @else {
+  <div class="card users-card">
+    <div class="table-wrap">
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Added</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (user of users; track user.id) {
+            <tr>
+              <td class="name-cell">{{ user.name }}</td>
+              <td>{{ user.email }}</td>
+              <td>
+                <span
+                  class="role-badge"
+                  [class.role-admin]="user.role === 'admin'"
+                >
+                  {{ user.role }}
+                </span>
+              </td>
+              <td>{{ user.createdAt | date: "medium" }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @if (users.length === 0) {
+      <p class="muted">No users yet.</p>
+    }
+  </div>
+}
